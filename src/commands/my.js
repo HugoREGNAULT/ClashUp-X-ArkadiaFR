@@ -1,6 +1,6 @@
 import { SlashCommandBuilder } from "discord.js";
+import { handleMyImport } from "../services/myImportService.js";
 import {
-  handleMyImport,
   handleMyProfile,
   handleMySetMain
 } from "../services/myProfileService.js";

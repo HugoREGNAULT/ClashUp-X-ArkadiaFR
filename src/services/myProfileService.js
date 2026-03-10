@@ -1,11 +1,11 @@
 import { MessageFlags } from "discord.js";
+import { fetchPlayerFromAPI } from "./cocPlayerService.js";
 import { handleMyImport as handleImportFlow } from "./myImportService.js";
 import {
   getMainParsedImport,
   getParsedImport,
   getPlayerProfile,
-  setMainAccount,
-  sanitizePlayerTag
+  setMainAccount
 } from "./myStorageService.js";
 import {
   buildMyNoProfileV2,
@@ -24,8 +24,7 @@ const VIEW_KEYS = new Set([
   "sieges",
   "equipment",
   "walls",
-  "upgrades",
-  "buildings"
+  "upgrades"
 ]);
 
 export async function handleMyImport(interaction) {
@@ -42,14 +41,20 @@ export async function handleMyProfile(interaction) {
       return interaction.reply(buildMyNoProfileV2());
     }
 
+    const apiPlayer = await fetchPlayerFromAPI(
+      context.parsed.playerTag,
+      interaction.client.env.COC_API_TOKEN
+    );
+
     return interaction.reply(
       buildMyProfileViewV2({
         ownerId: interaction.user.id,
         currentView: "overview",
         profile: context.profile,
         parsed: context.parsed,
+        apiPlayer,
         title: "Profil joueur",
-        body: buildOverviewBody(context.profile, context.parsed)
+        body: buildOverviewBody(context.parsed)
       })
     );
   } catch (error) {
@@ -97,15 +102,19 @@ export async function handleMySetMain(interaction) {
 }
 
 export async function handleMyProfileButton(interaction) {
-  const parts = String(interaction.customId || "").split(":");
-
-  if (parts.length !== 5 || parts[0] !== "my" || parts[1] !== "view") {
+  if (!interaction.isStringSelectMenu()) {
     return false;
   }
 
-  const view = parts[2];
-  const ownerId = parts[3];
-  const tagToken = parts[4];
+  const parts = String(interaction.customId || "").split(":");
+
+  if (parts.length !== 4 || parts[0] !== "my" || parts[1] !== "profile-select") {
+    return false;
+  }
+
+  const ownerId = parts[2];
+  const tagToken = parts[3];
+  const view = interaction.values?.[0];
 
   if (!VIEW_KEYS.has(view)) {
     return false;
@@ -127,20 +136,26 @@ export async function handleMyProfileButton(interaction) {
       return true;
     }
 
+    const apiPlayer = await fetchPlayerFromAPI(
+      parsed.playerTag,
+      interaction.client.env.COC_API_TOKEN
+    );
+
     await interaction.update(
       buildMyProfileViewV2({
         ownerId,
         currentView: view,
         profile,
         parsed,
+        apiPlayer,
         title: getViewTitle(view),
-        body: buildViewBody(view, profile, parsed)
+        body: buildViewBody(view, parsed)
       })
     );
 
     return true;
   } catch (error) {
-    console.error("[MY BUTTON] Erreur :", error);
+    console.error("[MY PROFILE MENU] Erreur :", error);
 
     if (!interaction.replied && !interaction.deferred) {
       await interaction.reply({
@@ -202,17 +217,15 @@ function getViewTitle(view) {
       return "Remparts";
     case "upgrades":
       return "Améliorations";
-    case "buildings":
-      return "Bâtiments";
     default:
       return "Profil joueur";
   }
 }
 
-function buildViewBody(view, profile, parsed) {
+function buildViewBody(view, parsed) {
   switch (view) {
     case "overview":
-      return buildOverviewBody(profile, parsed);
+      return buildOverviewBody(parsed);
     case "heroes":
       return buildHeroesBody(parsed);
     case "troops":
@@ -229,35 +242,19 @@ function buildViewBody(view, profile, parsed) {
       return buildWallsBody(parsed);
     case "upgrades":
       return buildUpgradesBody(parsed);
-    case "buildings":
-      return buildLeveledBody("Bâtiments", parsed.buildings);
     default:
-      return buildOverviewBody(profile, parsed);
+      return buildOverviewBody(parsed);
   }
 }
 
-function buildOverviewBody(profile, parsed) {
-  const linkedAccounts = Array.isArray(profile?.accounts) ? profile.accounts.length : 1;
-  const isMain = profile?.mainAccount === parsed.playerTag ? "Oui" : "Non";
-
+function buildOverviewBody(parsed) {
   return [
-    `**Pseudo :** ${parsed.playerName || "Inconnu"}`,
-    `**Tag :** ${parsed.playerTag}`,
-    `**HDV :** ${parsed.townHall ?? "Inconnu"}`,
-    `**Compte principal :** ${isMain}`,
-    `**Comptes liés :** ${linkedAccounts}`,
-    "",
     `**Héros :** ${parsed.heroesCount ?? countKeys(parsed.heroes)}`,
     `**Troupes :** ${parsed.troopsCount ?? countKeys(parsed.troops)}`,
     `**Sorts :** ${parsed.spellsCount ?? countKeys(parsed.spells)}`,
     `**Familiers :** ${parsed.petsCount ?? countKeys(parsed.pets)}`,
     `**Équipements :** ${parsed.equipmentCount ?? countKeys(parsed.equipment)}`,
-    `**Engins :** ${parsed.siegeMachinesCount ?? countKeys(parsed.siegeMachines)}`,
-    "",
-    `**Bâtiments parsés :** ${parsed.buildingsCount ?? countKeys(parsed.buildings)}`,
-    `**Remparts détectés :** ${parsed.walls?.total ?? 0}`,
-    "",
-    `**Dernier import :** ${formatIsoDate(parsed.lastSyncAt)}`
+    `**Engins :** ${parsed.siegeMachinesCount ?? countKeys(parsed.siegeMachines)}`
   ].join("\n");
 }
 
@@ -301,7 +298,7 @@ function buildWallsBody(parsed) {
   }
 
   return [
-    `**Total remparts détectés :** ${walls.total ?? 0}`,
+    `**Total :** ${walls.total ?? 0}`,
     "",
     ...entries.map(([level, count]) => `Niveau ${level} • ${count}`)
   ].join("\n");
@@ -309,7 +306,7 @@ function buildWallsBody(parsed) {
 
 function buildUpgradesBody(parsed) {
   return [
-    "Cette vue sert de **hub d’améliorations**.",
+    "Cette vue servira de **hub d’améliorations**.",
     "",
     `**HDV actuel :** ${parsed.townHall ?? "Inconnu"}`,
     `**Héros connus :** ${parsed.heroesCount ?? countKeys(parsed.heroes)}`,
@@ -318,9 +315,8 @@ function buildUpgradesBody(parsed) {
     `**Familiers connus :** ${parsed.petsCount ?? countKeys(parsed.pets)}`,
     `**Équipements connus :** ${parsed.equipmentCount ?? countKeys(parsed.equipment)}`,
     `**Engins connus :** ${parsed.siegeMachinesCount ?? countKeys(parsed.siegeMachines)}`,
-    `**Remparts détectés :** ${parsed.walls?.total ?? 0}`,
     "",
-    "_La comparaison avec les niveaux max par HDV sera branchée plus tard avec ton document._"
+    "_La comparaison avec les niveaux max par HDV sera branchée plus tard._"
   ].join("\n");
 }
 
@@ -337,22 +333,6 @@ function formatLeveledEntries(collection) {
 function countKeys(collection) {
   if (!collection || typeof collection !== "object") return 0;
   return Object.keys(collection).length;
-}
-
-function formatIsoDate(isoString) {
-  if (!isoString) return "Inconnu";
-
-  const date = new Date(isoString);
-
-  if (Number.isNaN(date.getTime())) {
-    return String(isoString);
-  }
-
-  return new Intl.DateTimeFormat("fr-FR", {
-    dateStyle: "medium",
-    timeStyle: "short",
-    timeZone: "Europe/Paris"
-  }).format(date);
 }
 
 function humanizeKey(key) {

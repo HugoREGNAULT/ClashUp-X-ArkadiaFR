@@ -4,10 +4,14 @@ import {
   ButtonStyle,
   ContainerBuilder,
   MessageFlags,
+  SectionBuilder,
   SeparatorBuilder,
   SeparatorSpacingSize,
-  TextDisplayBuilder
+  StringSelectMenuBuilder,
+  TextDisplayBuilder,
+  ThumbnailBuilder
 } from "discord.js";
+import { getEmoji } from "../constants/myEmojis.js";
 
 const ACCENT_COLOR = 0xA8DCFF;
 
@@ -94,14 +98,13 @@ export function buildMyImportSuccessV2({ parsed, profile, sourceLabel }) {
     .addTextDisplayComponents(
       new TextDisplayBuilder().setContent(
         [
-          `**Héros :** ${parsed.heroesCount}`,
+          `**Héros :** ${parsed.heroesCount ?? 0}`,
           `**Troupes :** ${parsed.troopsCount ?? 0}`,
           `**Sorts :** ${parsed.spellsCount ?? 0}`,
-          `**Familiers :** ${parsed.petsCount}`,
-          `**Équipements :** ${parsed.equipmentCount}`,
+          `**Familiers :** ${parsed.petsCount ?? 0}`,
+          `**Équipements :** ${parsed.equipmentCount ?? 0}`,
           `**Engins :** ${parsed.siegeMachinesCount ?? 0}`,
-          `**Remparts :** ${parsed.walls?.total ?? 0}`,
-          `**Bâtiments :** ${parsed.buildingsCount}`
+          `**Remparts :** ${parsed.walls?.total ?? 0}`
         ].join("\n")
       )
     )
@@ -189,7 +192,7 @@ export function buildMyUnauthorizedButtonV2() {
     .addTextDisplayComponents(
       new TextDisplayBuilder().setContent("## 🔒 Action non autorisée"),
       new TextDisplayBuilder().setContent(
-        "Seul le propriétaire de cette fiche peut utiliser ces boutons."
+        "Seul le propriétaire de cette fiche peut utiliser ce menu."
       )
     );
 
@@ -204,22 +207,57 @@ export function buildMyProfileViewV2({
   currentView,
   profile,
   parsed,
+  apiPlayer,
   title,
   body
 }) {
+  const thEmoji = getEmoji("townHall", parsed.townHall);
+  const levelEmoji = getEmoji("misc", "level");
+  const clanEmoji = getEmoji("misc", "clan");
+  const importEmoji = getEmoji("misc", "import");
+
+  const leagueBadge =
+    apiPlayer?.league?.iconUrls?.medium ||
+    apiPlayer?.league?.iconUrls?.small ||
+    null;
+
+  const playerName = apiPlayer?.name || parsed.playerName || "Inconnu";
+  const expLevel = apiPlayer?.expLevel ?? "Inconnu";
+
+  const clanName = apiPlayer?.clan?.name || "Sans clan";
+  const clanTag = apiPlayer?.clan?.tag || null;
+  const clanUrl = clanTag
+    ? `https://link.clashofclans.com/?action=OpenClanProfile&tag=${clanTag.replace("#", "")}`
+    : null;
+  const clanDisplay = clanUrl ? `[${clanName}](${clanUrl})` : clanName;
+
+  const importTimestamp = toUnixTimestamp(parsed.lastSyncAt);
+
+  const section = new SectionBuilder().addTextDisplayComponents(
+    new TextDisplayBuilder().setContent(`## 👤 ${title}`),
+    new TextDisplayBuilder().setContent(
+      [
+        `**Pseudo :** ${playerName}`,
+        `**Tag :** ${parsed.playerTag}`,
+        `${thEmoji} **HDV :** ${parsed.townHall ?? "Inconnu"}`,
+        `${levelEmoji} **Niveau :** ${expLevel}`,
+        `${clanEmoji} **Clan :** ${clanDisplay}`,
+        importTimestamp
+          ? `-# ${importEmoji} Dernier import : <t:${importTimestamp}:R>`
+          : `-# ${importEmoji} Dernier import : inconnu`
+      ].join("\n")
+    )
+  );
+
+  if (leagueBadge) {
+    section.setThumbnailAccessory(
+      new ThumbnailBuilder().setURL(leagueBadge)
+    );
+  }
+
   const container = new ContainerBuilder()
     .setAccentColor(ACCENT_COLOR)
-    .addTextDisplayComponents(
-      new TextDisplayBuilder().setContent(`## 👤 ${title}`),
-      new TextDisplayBuilder().setContent(
-        [
-          `**Pseudo :** ${parsed.playerName || "Inconnu"}`,
-          `**Tag :** ${parsed.playerTag}`,
-          `**HDV :** ${parsed.townHall ?? "Inconnu"}`,
-          `**Main :** ${profile?.mainAccount || parsed.playerTag}`
-        ].join("\n")
-      )
-    )
+    .addSectionComponents(section)
     .addSeparatorComponents(
       new SeparatorBuilder()
         .setSpacing(SeparatorSpacingSize.Small)
@@ -229,33 +267,35 @@ export function buildMyProfileViewV2({
 
   const tagToken = sanitizeTagToken(parsed.playerTag);
 
-  const row1 = new ActionRowBuilder().addComponents(
-    buildNavButton("overview", "Aperçu", currentView, ownerId, tagToken),
-    buildNavButton("heroes", "Héros", currentView, ownerId, tagToken),
-    buildNavButton("troops", "Troupes", currentView, ownerId, tagToken),
-    buildNavButton("spells", "Sorts", currentView, ownerId, tagToken),
-    buildNavButton("pets", "Familiers", currentView, ownerId, tagToken)
-  );
+  const menu = new StringSelectMenuBuilder()
+    .setCustomId(`my:profile-select:${ownerId}:${tagToken}`)
+    .setPlaceholder("Naviguer dans le profil")
+    .addOptions(
+      buildOption("overview", "Aperçu", currentView === "overview"),
+      buildOption("heroes", "Héros", currentView === "heroes"),
+      buildOption("troops", "Troupes", currentView === "troops"),
+      buildOption("spells", "Sorts", currentView === "spells"),
+      buildOption("pets", "Familiers", currentView === "pets"),
+      buildOption("sieges", "Engins", currentView === "sieges"),
+      buildOption("equipment", "Équipements", currentView === "equipment"),
+      buildOption("walls", "Remparts", currentView === "walls"),
+      buildOption("upgrades", "Améliorations", currentView === "upgrades")
+    );
 
-  const row2 = new ActionRowBuilder().addComponents(
-    buildNavButton("sieges", "Engins", currentView, ownerId, tagToken),
-    buildNavButton("equipment", "Équipements", currentView, ownerId, tagToken),
-    buildNavButton("walls", "Remparts", currentView, ownerId, tagToken),
-    buildNavButton("upgrades", "Amélios", currentView, ownerId, tagToken),
-    buildNavButton("buildings", "Bâtiments", currentView, ownerId, tagToken)
-  );
+  const row = new ActionRowBuilder().addComponents(menu);
 
   return {
     flags: MessageFlags.IsComponentsV2,
-    components: [container, row1, row2]
+    components: [container, row]
   };
 }
 
-function buildNavButton(view, label, currentView, ownerId, tagToken) {
-  return new ButtonBuilder()
-    .setCustomId(`my:view:${view}:${ownerId}:${tagToken}`)
-    .setLabel(label)
-    .setStyle(currentView === view ? ButtonStyle.Primary : ButtonStyle.Secondary);
+function buildOption(value, label, isDefault = false) {
+  return {
+    label,
+    value,
+    default: isDefault
+  };
 }
 
 function makeProgressBar(percent) {
@@ -277,4 +317,13 @@ function sanitizeTagToken(tag) {
     .replace(/^#/, "")
     .replace(/[^A-Z0-9]/gi, "")
     .toUpperCase();
+}
+
+function toUnixTimestamp(value) {
+  if (!value) return null;
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+
+  return Math.floor(date.getTime() / 1000);
 }

@@ -1,5 +1,6 @@
 import fs from "fs";
 import path from "path";
+import { normalizeParsedVillage } from "./myIdResolverService.js";
 
 const DATA_PATH = path.join(process.cwd(), "data", "coc_levels.json");
 
@@ -34,6 +35,7 @@ function getIndexes() {
       troops: buildIndex(levels.troops),
       spells: buildIndex(levels.spells),
       pets: buildIndex(levels.pets),
+      guards: buildIndex(levels.guards),
       sieges: buildIndex(levels.siege_machines)
     };
   }
@@ -93,9 +95,10 @@ function computeProgressDetails(collection, index, th) {
     matched += 1;
   }
 
-  const percent = totalMax > 0
-    ? Math.max(0, Math.min(100, Math.round((totalCurrent / totalMax) * 100)))
-    : 0;
+  const percent =
+    totalMax > 0
+      ? Math.max(0, Math.min(100, Math.round((totalCurrent / totalMax) * 100)))
+      : 0;
 
   return {
     percent,
@@ -107,20 +110,23 @@ function computeProgressDetails(collection, index, th) {
 }
 
 export function computeVillageProgress(parsedVillage, townHall) {
-  const th = Number(townHall ?? parsedVillage?.townHall);
+  const normalized = normalizeParsedVillage(parsedVillage);
+  const th = Number(townHall ?? normalized?.townHall);
   const indexes = getIndexes();
 
-  const heroes = computeProgressDetails(parsedVillage?.heroes, indexes.heroes, th);
-  const troops = computeProgressDetails(parsedVillage?.troops, indexes.troops, th);
-  const spells = computeProgressDetails(parsedVillage?.spells, indexes.spells, th);
-  const pets = computeProgressDetails(parsedVillage?.pets, indexes.pets, th);
-  const sieges = computeProgressDetails(parsedVillage?.siegeMachines, indexes.sieges, th);
+  const heroes = computeProgressDetails(normalized?.heroes, indexes.heroes, th);
+  const troops = computeProgressDetails(normalized?.troops, indexes.troops, th);
+  const spells = computeProgressDetails(normalized?.spells, indexes.spells, th);
+  const pets = computeProgressDetails(normalized?.pets, indexes.pets, th);
+  const guards = computeProgressDetails(normalized?.guards, indexes.guards, th);
+  const sieges = computeProgressDetails(normalized?.siegeMachines, indexes.sieges, th);
 
   const globalCurrent =
     heroes.current +
     troops.current +
     spells.current +
     pets.current +
+    guards.current +
     sieges.current;
 
   const globalMax =
@@ -128,6 +134,7 @@ export function computeVillageProgress(parsedVillage, townHall) {
     troops.max +
     spells.max +
     pets.max +
+    guards.max +
     sieges.max;
 
   const overall =
@@ -140,14 +147,15 @@ export function computeVillageProgress(parsedVillage, townHall) {
     troops: troops.percent,
     spells: spells.percent,
     pets: pets.percent,
+    guards: guards.percent,
     sieges: sieges.percent,
     overall,
-
     details: {
       heroes,
       troops,
       spells,
       pets,
+      guards,
       sieges
     }
   };

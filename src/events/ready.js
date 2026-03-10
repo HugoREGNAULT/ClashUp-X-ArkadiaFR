@@ -5,6 +5,7 @@ import { logRegisteredClansWarStats } from "../services/startupClanLogger.js";
 import { startWarLoop } from "../jobs/warLoop.js";
 import { startReminderLoop } from "../jobs/reminderLoop.js";
 import { logBotError, logInfo } from "../services/logger.js";
+import { deploySlashCommands } from "../services/deployCommands.js";
 
 export default {
   name: Events.ClientReady,
@@ -23,6 +24,14 @@ export default {
     });
 
     console.log("✅ Status appliqué");
+
+    try {
+      await deploySlashCommands();
+      console.log("✅ Commandes slash déployées automatiquement");
+    } catch (error) {
+      console.error("❌ Erreur déploiement automatique des commandes :", error);
+      await logBotError(client, "Erreur déploiement automatique des commandes", error);
+    }
 
     try {
       await logRegisteredClansWarStats(client.env);

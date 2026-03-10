@@ -4,6 +4,7 @@ dotenv.config();
 
 const env = {
   DISCORD_TOKEN: process.env.DISCORD_TOKEN,
+  DISCORD_CLIENT_ID: process.env.DISCORD_CLIENT_ID,
   COC_API_TOKEN: process.env.COC_API_TOKEN,
 
   EMBEDS_CHANNEL_ID: process.env.EMBEDS_CHANNEL_ID,
@@ -26,6 +27,7 @@ const env = {
 
 const required = [
   "DISCORD_TOKEN",
+  "DISCORD_CLIENT_ID",
   "COC_API_TOKEN",
   "EMBEDS_CHANNEL_ID",
   "WAR_FEED_CHANNEL_ID",

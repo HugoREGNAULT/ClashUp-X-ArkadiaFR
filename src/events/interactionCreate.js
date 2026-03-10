@@ -10,6 +10,9 @@ export default {
     const command = client.commands.get(interaction.commandName);
 
     if (!command) {
+      console.warn(
+        `⚠️ Commande introuvable : ${interaction.commandName}`
+      );
       return;
     }
 

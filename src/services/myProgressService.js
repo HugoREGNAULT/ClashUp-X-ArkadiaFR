@@ -1,94 +1,154 @@
-/src/services/myProgressService.js
 import fs from "fs";
 import path from "path";
 
 const DATA_PATH = path.join(process.cwd(), "data", "coc_levels.json");
 
 let LEVELS = null;
+let INDEXES = null;
 
 function loadLevels() {
   if (!LEVELS) {
     LEVELS = JSON.parse(fs.readFileSync(DATA_PATH, "utf8"));
   }
+
   return LEVELS;
 }
 
-function getMaxLevel(mapping, key, th) {
+function buildIndex(entries) {
+  const map = new Map();
 
-  const entry = mapping.find(e => e.api_name === key);
+  for (const entry of entries ?? []) {
+    if (!entry?.api_name) continue;
+    map.set(String(entry.api_name).toLowerCase(), entry);
+  }
 
-  if (!entry) return null;
-
-  const table = entry.max_by_hdv;
-
-  if (!table) return null;
-
-  return table[String(th)] ?? null;
+  return map;
 }
 
-function computeProgress(collection, mapping, th) {
+function getIndexes() {
+  if (!INDEXES) {
+    const levels = loadLevels();
 
+    INDEXES = {
+      heroes: buildIndex(levels.heroes),
+      troops: buildIndex(levels.troops),
+      spells: buildIndex(levels.spells),
+      pets: buildIndex(levels.pets),
+      sieges: buildIndex(levels.siege_machines)
+    };
+  }
+
+  return INDEXES;
+}
+
+function getMaxLevel(index, key, th) {
+  if (!index || !key || !Number.isFinite(Number(th))) {
+    return null;
+  }
+
+  const entry = index.get(String(key).toLowerCase());
+
+  if (!entry?.max_by_hdv) {
+    return null;
+  }
+
+  const max = entry.max_by_hdv[String(th)];
+
+  return Number.isFinite(Number(max)) ? Number(max) : null;
+}
+
+function computeProgressDetails(collection, index, th) {
   if (!collection || typeof collection !== "object") {
-    return 0;
+    return {
+      percent: 0,
+      current: 0,
+      max: 0,
+      matched: 0,
+      ignored: 0
+    };
   }
 
   let totalCurrent = 0;
   let totalMax = 0;
+  let matched = 0;
+  let ignored = 0;
 
-  for (const [key, level] of Object.entries(collection)) {
+  for (const [key, rawLevel] of Object.entries(collection)) {
+    const level = Number(rawLevel);
 
-    const max = getMaxLevel(mapping, key, th);
+    if (!Number.isFinite(level)) {
+      ignored += 1;
+      continue;
+    }
 
-    if (!max) continue;
+    const max = getMaxLevel(index, key, th);
 
-    const lvl = Number(level);
+    if (!Number.isFinite(max) || max <= 0) {
+      ignored += 1;
+      continue;
+    }
 
-    if (!Number.isFinite(lvl)) continue;
-
-    totalCurrent += lvl;
+    totalCurrent += Math.min(level, max);
     totalMax += max;
+    matched += 1;
   }
 
-  if (totalMax === 0) return 0;
+  const percent = totalMax > 0
+    ? Math.max(0, Math.min(100, Math.round((totalCurrent / totalMax) * 100)))
+    : 0;
 
-  return Math.round((totalCurrent / totalMax) * 100);
+  return {
+    percent,
+    current: totalCurrent,
+    max: totalMax,
+    matched,
+    ignored
+  };
 }
 
 export function computeVillageProgress(parsedVillage, townHall) {
+  const th = Number(townHall ?? parsedVillage?.townHall);
+  const indexes = getIndexes();
 
-  const levels = loadLevels();
+  const heroes = computeProgressDetails(parsedVillage?.heroes, indexes.heroes, th);
+  const troops = computeProgressDetails(parsedVillage?.troops, indexes.troops, th);
+  const spells = computeProgressDetails(parsedVillage?.spells, indexes.spells, th);
+  const pets = computeProgressDetails(parsedVillage?.pets, indexes.pets, th);
+  const sieges = computeProgressDetails(parsedVillage?.siegeMachines, indexes.sieges, th);
+
+  const globalCurrent =
+    heroes.current +
+    troops.current +
+    spells.current +
+    pets.current +
+    sieges.current;
+
+  const globalMax =
+    heroes.max +
+    troops.max +
+    spells.max +
+    pets.max +
+    sieges.max;
+
+  const overall =
+    globalMax > 0
+      ? Math.max(0, Math.min(100, Math.round((globalCurrent / globalMax) * 100)))
+      : 0;
 
   return {
+    heroes: heroes.percent,
+    troops: troops.percent,
+    spells: spells.percent,
+    pets: pets.percent,
+    sieges: sieges.percent,
+    overall,
 
-    heroes: computeProgress(
-      parsedVillage.heroes,
-      levels.heroes,
-      townHall
-    ),
-
-    troops: computeProgress(
-      parsedVillage.troops,
-      levels.troops,
-      townHall
-    ),
-
-    spells: computeProgress(
-      parsedVillage.spells,
-      levels.spells,
-      townHall
-    ),
-
-    pets: computeProgress(
-      parsedVillage.pets,
-      levels.pets,
-      townHall
-    ),
-
-    sieges: computeProgress(
-      parsedVillage.siegeMachines,
-      levels.siege_machines,
-      townHall
-    )
-
+    details: {
+      heroes,
+      troops,
+      spells,
+      pets,
+      sieges
+    }
   };
 }

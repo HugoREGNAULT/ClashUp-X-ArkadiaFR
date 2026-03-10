@@ -1,0 +1,29 @@
+# macOS
+.DS_Store
+
+# dependencies
+node_modules/
+
+# gitignored env
+.env
+.env.*
+!.env.example
+
+# logs
+*.log
+logs/
+
+# runtime data
+data/*.json
+data/wars/*.json
+
+# keep folder structure if needed
+!data/.gitkeep
+
+# editor
+.vscode/
+.idea/
+
+# build
+dist/
+build/

@@ -142,18 +142,18 @@ export function buildWarOverviewContainer(war) {
   const o = war.opponent;
 
   const clanStars = String(c.stars ?? 0).padStart(2, " ");
-  const clanHits = `${c.attacks ?? 0}/${maxAttacks}`.padStart(7, " ");
-  const clanPct = formatPercent(c.destruction).padStart(7, " ");
+  const clanHits = `${c.attacks ?? 0}/${maxAttacks}`.padStart(3, " ");
+  const clanPct = formatPercent(c.destruction).padStart(3, " ");
 
   const enemyStars = String(o.stars ?? 0).padStart(2, " ");
-  const enemyHits = `${o.attacks ?? 0}/${maxAttacks}`.padStart(7, " ");
-  const enemyPct = formatPercent(o.destruction).padStart(7, " ");
+  const enemyHits = `${o.attacks ?? 0}/${maxAttacks}`.padStart(3, " ");
+  const enemyPct = formatPercent(o.destruction).padStart(3, " ");
 
   const statsBlock = new TextDisplayBuilder().setContent(
     [
       "**Statistiques**",
-      `Clan       : ${EMOJI_US_NEW} \`${clanStars}/${maxStars}\`   ${EMOJI_FIGHT} \`${clanHits}\`   \`${clanPct}\``,
-      `Ennemi     : ${EMOJI_US_NEW} \`${enemyStars}/${maxStars}\`   ${EMOJI_FIGHT} \`${enemyHits}\`   \`${enemyPct}\``
+      `Clan       : ${EMOJI_US_NEW} \`${clanStars}/${maxStars}\`   ${EMOJI_FIGHT} \`${clanHits}\`  \`${clanPct}\``,
+      `Ennemi  : ${EMOJI_US_NEW} \`${enemyStars}/${maxStars}\`   ${EMOJI_FIGHT} \`${enemyHits}\`  \`${enemyPct}\``
     ].join("\n")
   );
 
@@ -165,7 +165,7 @@ export function buildWarOverviewContainer(war) {
   );
 
   const footerBlock = new TextDisplayBuilder().setContent(
-    `Dernière actualisation : <t:${now}:R>`
+    `-# Dernière actualisation : <t:${now}:R>`
   );
 
   return new ContainerBuilder()

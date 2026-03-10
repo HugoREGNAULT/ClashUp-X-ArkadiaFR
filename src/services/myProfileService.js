@@ -268,27 +268,6 @@ function buildWallsSection(parsed) {
   ].join("\n");
 }
 
-function buildOverviewSection(progress, parsed, townHall) {
-  const lines = [
-    "📊〡Aperçu global",
-    `     ➥ Héros **${safePercent(progress.heroes)}%** • Troupes **${safePercent(progress.troops)}%** • Sorts **${safePercent(progress.spells)}%**`,
-    `           Familiers **${safePercent(progress.pets)}%** • Engins **${safePercent(progress.sieges)}%**`
-  ];
-
-  if (hasUnlockedEntries("guards", townHall)) {
-    lines.push(`           Gardiens **${safePercent(progress.guards)}%**`);
-  }
-
-  const total = parsed?.walls?.total ?? sumObjectValues(parsed?.walls?.byLevel);
-  if (total > 0) {
-    lines.push(`           Remparts **${total}**`);
-  }
-
-  lines.push(`           Village global **${safePercent(progress.overall)}%**`);
-
-  return lines.join("\n");
-}
-
 function formatDenseOverviewLines(category, collection, townHall, itemsPerLine) {
   const index = getEntriesForCategory(category);
   const items = [];

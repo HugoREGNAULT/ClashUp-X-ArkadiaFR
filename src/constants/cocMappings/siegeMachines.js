@@ -1,3 +1,4 @@
+/src/constants/cocMappings/siegeMachines.js
 export const SIEGE_MACHINE_NAME_ALIASES = {
     wallwrecker: "wallWrecker",
     battleblimp: "battleBlimp",

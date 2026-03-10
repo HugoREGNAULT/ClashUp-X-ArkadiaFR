@@ -1,3 +1,4 @@
+/src/services/myParserService.js
 export function parsePlayerExport(raw) {
 
   const parsed = {

@@ -1,3 +1,4 @@
+/src/constants/cocMappings/heroes.js
 export const HERO_NAME_ALIASES = {
   barbianking: "barbarianKing",
   barbarianking: "barbarianKing",

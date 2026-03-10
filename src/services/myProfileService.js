@@ -1,3 +1,4 @@
+/src/services/myProfileService.js
 import { MessageFlags } from "discord.js";
 import { fetchPlayerFromAPI } from "./cocPlayerService.js";
 import { handleMyImport as handleImportFlow } from "./myImportService.js";

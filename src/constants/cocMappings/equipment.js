@@ -1,3 +1,4 @@
+/src/constants/cocMappings/equipment.js
 export const EQUIPMENT_NAME_ALIASES = {
   giantgauntlet: "giantGauntlet",
   ragevial: "rageVial",

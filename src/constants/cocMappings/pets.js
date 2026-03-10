@@ -1,3 +1,4 @@
+/src/constants/cocMappings/pets.js
 export const PET_NAME_ALIASES = {
   unicorn: "unicorn",
   mightyyak: "mightyYak",

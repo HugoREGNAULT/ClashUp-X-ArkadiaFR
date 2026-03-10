@@ -1,3 +1,4 @@
+/src/constants/cocMappings/buildings.js
 export const BUILDING_NAME_ALIASES = {
   townhall: "townHall",
   th: "townHall",

@@ -1,3 +1,4 @@
+/src/constants/cocMappings/troops.js
 export const TROOP_NAME_ALIASES = {
     barbarian: "barbarian",
     archer: "archer",

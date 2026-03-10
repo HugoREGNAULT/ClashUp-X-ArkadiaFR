@@ -1,3 +1,4 @@
+/src/constants/cocMappings/spells.js
 export const SPELL_NAME_ALIASES = {
     lightningspell: "lightningSpell",
     healspell: "healSpell",

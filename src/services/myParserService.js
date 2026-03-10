@@ -2,6 +2,9 @@ import { HERO_NAME_ALIASES, BUILDER_BASE_HEROES } from "../constants/cocMappings
 import { PET_NAME_ALIASES } from "../constants/cocMappings/pets.js";
 import { EQUIPMENT_NAME_ALIASES } from "../constants/cocMappings/equipment.js";
 import { BUILDING_NAME_ALIASES } from "../constants/cocMappings/buildings.js";
+import { TROOP_NAME_ALIASES } from "../constants/cocMappings/troops.js";
+import { SPELL_NAME_ALIASES } from "../constants/cocMappings/spells.js";
+import { SIEGE_MACHINE_NAME_ALIASES } from "../constants/cocMappings/siegeMachines.js";
 
 export function parsePlayerExport(payload, discordId) {
   const root = resolvePlayerRoot(payload);
@@ -11,6 +14,11 @@ export function parsePlayerExport(payload, discordId) {
       readFirstDefined(payload, ["tag", "playerTag", "player_tag"]) ??
       "#UNKNOWN"
   );
+
+  const playerName =
+    readFirstDefined(root, ["name", "playerName", "username"]) ??
+    readFirstDefined(payload, ["name", "playerName", "username"]) ??
+    null;
 
   const townHall =
     toNumber(readFirstDefined(root, ["townHallLevel", "townHall", "thLevel", "townhall"])) ??
@@ -35,6 +43,25 @@ export function parsePlayerExport(payload, discordId) {
     ...normalizeCollection(root.equipments)
   ];
 
+  const troopsSource = [
+    ...normalizeCollection(root.troops),
+    ...normalizeCollection(root.homeTroops),
+    ...normalizeCollection(root.armyTroops),
+    ...normalizeCollection(root.units)
+  ];
+
+  const spellsSource = [
+    ...normalizeCollection(root.spells),
+    ...normalizeCollection(root.spellList),
+    ...normalizeCollection(root.magic)
+  ];
+
+  const siegeMachinesSource = [
+    ...normalizeCollection(root.siegeMachines),
+    ...normalizeCollection(root.sieges),
+    ...normalizeCollection(root.workshopTroops)
+  ];
+
   const buildingsSource = [
     ...normalizeCollection(root.buildings),
     ...normalizeCollection(root.homeBuildings),
@@ -45,7 +72,10 @@ export function parsePlayerExport(payload, discordId) {
   const heroesResult = parseLeveledCollection(heroesSource, HERO_NAME_ALIASES);
   const petsResult = parseLeveledCollection(petsSource, PET_NAME_ALIASES);
   const equipmentResult = parseLeveledCollection(equipmentSource, EQUIPMENT_NAME_ALIASES);
-  const buildingsResult = parseLeveledCollection(buildingsSource, BUILDING_NAME_ALIASES);
+  const troopsResult = parseLeveledCollection(troopsSource, TROOP_NAME_ALIASES);
+  const spellsResult = parseLeveledCollection(spellsSource, SPELL_NAME_ALIASES);
+  const siegeMachinesResult = parseLeveledCollection(siegeMachinesSource, SIEGE_MACHINE_NAME_ALIASES);
+  const buildingsAndWallsResult = parseBuildingsAndWalls(buildingsSource);
 
   const heroes = {};
   const builderBase = {};
@@ -61,6 +91,7 @@ export function parsePlayerExport(payload, discordId) {
   return {
     discordId: String(discordId),
     playerTag,
+    playerName,
     townHall: townHall ?? null,
     heroes,
     heroesCount: Object.keys(heroes).length,
@@ -70,18 +101,31 @@ export function parsePlayerExport(payload, discordId) {
     petsCount: Object.keys(petsResult.values).length,
     equipment: equipmentResult.values,
     equipmentCount: Object.keys(equipmentResult.values).length,
-    buildings: buildingsResult.values,
-    buildingsCount: Object.keys(buildingsResult.values).length,
+    troops: troopsResult.values,
+    troopsCount: Object.keys(troopsResult.values).length,
+    spells: spellsResult.values,
+    spellsCount: Object.keys(spellsResult.values).length,
+    siegeMachines: siegeMachinesResult.values,
+    siegeMachinesCount: Object.keys(siegeMachinesResult.values).length,
+    buildings: buildingsAndWallsResult.values,
+    buildingsCount: Object.keys(buildingsAndWallsResult.values).length,
+    walls: buildingsAndWallsResult.walls,
     unknownMappings: {
       heroes: heroesResult.unknown,
       pets: petsResult.unknown,
       equipment: equipmentResult.unknown,
-      buildings: buildingsResult.unknown
+      troops: troopsResult.unknown,
+      spells: spellsResult.unknown,
+      siegeMachines: siegeMachinesResult.unknown,
+      buildings: buildingsAndWallsResult.unknown
     },
     sourceMeta: {
       heroesEntries: heroesSource.length,
       petsEntries: petsSource.length,
       equipmentEntries: equipmentSource.length,
+      troopsEntries: troopsSource.length,
+      spellsEntries: spellsSource.length,
+      siegeMachinesEntries: siegeMachinesSource.length,
       buildingsEntries: buildingsSource.length
     },
     rawSummary: {
@@ -121,7 +165,16 @@ function looksLikePlayerRoot(value) {
     return true;
   }
 
-  return ["heroes", "heroes2", "pets", "equipment", "buildings"].some((key) => key in value);
+  return [
+    "heroes",
+    "heroes2",
+    "pets",
+    "equipment",
+    "troops",
+    "spells",
+    "siegeMachines",
+    "buildings"
+  ].some((key) => key in value);
 }
 
 function parseLeveledCollection(entries, aliasMap) {
@@ -153,6 +206,45 @@ function parseLeveledCollection(entries, aliasMap) {
   };
 }
 
+function parseBuildingsAndWalls(entries) {
+  const values = {};
+  const unknown = [];
+  const wallLevels = {};
+
+  for (const entry of entries) {
+    const canonicalName = resolveCanonicalName(entry, BUILDING_NAME_ALIASES);
+    const level = resolveLevel(entry);
+
+    if (!canonicalName || level == null) {
+      continue;
+    }
+
+    if (canonicalName.startsWith("unknown:")) {
+      unknown.push({
+        key: canonicalName.replace("unknown:", ""),
+        level
+      });
+      continue;
+    }
+
+    if (canonicalName === "wall") {
+      wallLevels[level] = (wallLevels[level] || 0) + 1;
+      continue;
+    }
+
+    values[canonicalName] = level;
+  }
+
+  return {
+    values,
+    unknown,
+    walls: {
+      total: Object.values(wallLevels).reduce((sum, count) => sum + count, 0),
+      byLevel: wallLevels
+    }
+  };
+}
+
 function resolveCanonicalName(entry, aliasMap) {
   const candidates = [
     entry?.name,
@@ -162,6 +254,9 @@ function resolveCanonicalName(entry, aliasMap) {
     entry?.hero,
     entry?.pet,
     entry?.equipment,
+    entry?.troop,
+    entry?.spell,
+    entry?.siege,
     entry?.villageObject,
     entry?.id,
     entry?.globalId,

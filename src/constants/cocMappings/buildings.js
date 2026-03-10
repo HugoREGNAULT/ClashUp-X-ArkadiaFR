@@ -39,5 +39,10 @@ export const BUILDING_NAME_ALIASES = {
   mortar: "mortar",
   bombtower: "bombTower",
   hiddentesla: "hiddenTesla",
-  airsweeper: "airSweeper"
+  airsweeper: "airSweeper",
+
+  wall: "wall",
+  walls: "wall",
+  rempart: "wall",
+  remparts: "wall"
 };

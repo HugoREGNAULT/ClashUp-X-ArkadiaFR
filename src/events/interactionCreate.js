@@ -1,42 +1,47 @@
-import { Events } from "discord.js";
-import { logCommandUsage, logCommandError } from "../services/logger.js";
+import { logCommandError, logCommandUsage } from "../services/logger.js";
+import { handleMyProfileButton } from "../services/myProfileService.js";
 
 export default {
-  name: Events.InteractionCreate,
-  once: false,
-  async execute(interaction, client) {
-    if (!interaction.isChatInputCommand()) return;
-
-    const command = client.commands.get(interaction.commandName);
-
-    if (!command) {
-      console.warn(
-        `⚠️ Commande introuvable : ${interaction.commandName}`
-      );
-      return;
-    }
-
+  name: "interactionCreate",
+  async execute(interaction) {
     try {
+      if (interaction.isButton()) {
+        const handled = await handleMyProfileButton(interaction);
+        if (handled) return;
+      }
+
+      if (!interaction.isChatInputCommand()) {
+        return;
+      }
+
+      const command = interaction.client.commands.get(interaction.commandName);
+
+      if (!command) {
+        return;
+      }
+
       await logCommandUsage(interaction);
-      await command.execute(interaction, client);
+      await command.execute(interaction);
     } catch (error) {
-      console.error(
-        `❌ Erreur exécution commande /${interaction.commandName}:`,
-        error
-      );
+      console.error("❌ Erreur interactionCreate :", error);
 
-      await logCommandError(interaction, error);
+      if (interaction.isChatInputCommand()) {
+        await logCommandError(interaction, error);
+      }
 
-      const replyPayload = {
-        content:
-          "❌ Une erreur est survenue pendant l'exécution de la commande.",
-        ephemeral: true
-      };
-
-      if (interaction.replied || interaction.deferred) {
-        await interaction.followUp(replyPayload).catch(() => null);
-      } else {
-        await interaction.reply(replyPayload).catch(() => null);
+      try {
+        if (interaction.deferred || interaction.replied) {
+          await interaction.editReply({
+            content: "Une erreur est survenue pendant l’exécution de la commande."
+          });
+        } else {
+          await interaction.reply({
+            content: "Une erreur est survenue pendant l’exécution de la commande.",
+            ephemeral: true
+          });
+        }
+      } catch (replyError) {
+        console.error("❌ Impossible de répondre après erreur :", replyError);
       }
     }
   }

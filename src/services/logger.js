@@ -1,3 +1,4 @@
+/src/services/logger.js
 import { EmbedBuilder } from "discord.js";
 
 const LOG_COLOR = 0xA8DCFF;

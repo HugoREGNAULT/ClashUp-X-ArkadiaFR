@@ -14,6 +14,7 @@ import {
   buildMyUnauthorizedButtonV2
 } from "../builders/myMessageBuilder.js";
 import { logCommandError, logInfo } from "./logger.js";
+import { computeVillageProgress } from "./myProgressService.js";
 
 const VIEW_KEYS = new Set([
   "overview",
@@ -46,6 +47,8 @@ export async function handleMyProfile(interaction) {
       interaction.client.env.COC_API_TOKEN
     );
 
+    const progress = computeVillageProgress(context.parsed, context.parsed.townHall);
+
     return interaction.reply(
       buildMyProfileViewV2({
         ownerId: interaction.user.id,
@@ -54,7 +57,7 @@ export async function handleMyProfile(interaction) {
         parsed: context.parsed,
         apiPlayer,
         title: "Profil joueur",
-        body: buildOverviewBody(context.parsed)
+        body: buildOverviewBody(context.parsed, progress)
       })
     );
   } catch (error) {
@@ -141,6 +144,8 @@ export async function handleMyProfileButton(interaction) {
       interaction.client.env.COC_API_TOKEN
     );
 
+    const progress = computeVillageProgress(parsed, parsed.townHall);
+
     await interaction.update(
       buildMyProfileViewV2({
         ownerId,
@@ -149,7 +154,7 @@ export async function handleMyProfileButton(interaction) {
         parsed,
         apiPlayer,
         title: getViewTitle(view),
-        body: buildViewBody(view, parsed)
+        body: buildViewBody(view, parsed, progress)
       })
     );
 
@@ -171,36 +176,23 @@ export async function handleMyProfileButton(interaction) {
 async function resolveProfileContext(discordId, requestedTag) {
   const profile = await getPlayerProfile(discordId);
 
-  if (!profile) {
-    return null;
-  }
+  if (!profile) return null;
 
   if (requestedTag) {
     const parsed = await getParsedImport(discordId, requestedTag);
     if (!parsed) return null;
 
-    return {
-      profile,
-      parsed
-    };
+    return { profile, parsed };
   }
 
   const parsed = await getMainParsedImport(discordId);
+  if (!parsed) return null;
 
-  if (!parsed) {
-    return null;
-  }
-
-  return {
-    profile,
-    parsed
-  };
+  return { profile, parsed };
 }
 
 function getViewTitle(view) {
   switch (view) {
-    case "overview":
-      return "Profil joueur";
     case "heroes":
       return "Héros";
     case "troops":
@@ -222,10 +214,10 @@ function getViewTitle(view) {
   }
 }
 
-function buildViewBody(view, parsed) {
+function buildViewBody(view, parsed, progress) {
   switch (view) {
     case "overview":
-      return buildOverviewBody(parsed);
+      return buildOverviewBody(parsed, progress);
     case "heroes":
       return buildHeroesBody(parsed);
     case "troops":
@@ -241,26 +233,33 @@ function buildViewBody(view, parsed) {
     case "walls":
       return buildWallsBody(parsed);
     case "upgrades":
-      return buildUpgradesBody(parsed);
+      return buildUpgradesBody(parsed, progress);
     default:
-      return buildOverviewBody(parsed);
+      return buildOverviewBody(parsed, progress);
   }
 }
 
-function buildOverviewBody(parsed) {
+function buildOverviewBody(parsed, progress) {
+  const wallsTotal = parsed.walls?.total ?? sumObjectValues(parsed.walls?.byLevel);
+
   return [
-    `**Héros :** ${parsed.heroesCount ?? countKeys(parsed.heroes)}`,
-    `**Troupes :** ${parsed.troopsCount ?? countKeys(parsed.troops)}`,
-    `**Sorts :** ${parsed.spellsCount ?? countKeys(parsed.spells)}`,
-    `**Familiers :** ${parsed.petsCount ?? countKeys(parsed.pets)}`,
-    `**Équipements :** ${parsed.equipmentCount ?? countKeys(parsed.equipment)}`,
-    `**Engins :** ${parsed.siegeMachinesCount ?? countKeys(parsed.siegeMachines)}`
+    "**Progression du village**",
+    "",
+    `👑 **Héros :** ${progress.heroes}%`,
+    `⚔️ **Troupes :** ${progress.troops}%`,
+    `🧪 **Sorts :** ${progress.spells}%`,
+    `🐾 **Familiers :** ${progress.pets}%`,
+    `🚀 **Engins :** ${progress.sieges}%`,
+    "",
+    `🧱 **Remparts détectés :** ${wallsTotal}`,
+    "",
+    "_Utilise le menu ci-dessous pour ouvrir le détail de chaque catégorie._"
   ].join("\n");
 }
 
 function buildHeroesBody(parsed) {
   const homeHeroes = formatLeveledEntries(parsed.heroes);
-  const builderHeroes = formatLeveledEntries(parsed.builderBase);
+  const builderHeroes = formatLeveledEntries(parsed.builderHeroes);
 
   if (!homeHeroes.length && !builderHeroes.length) {
     return "Aucun héros trouvé dans le dernier import.";
@@ -279,7 +278,7 @@ function buildLeveledBody(label, collection) {
   const lines = formatLeveledEntries(collection);
 
   if (!lines.length) {
-    return `Aucune donnée disponible pour **${label.toLowerCase()}**.\n\nRéimporte ton village pour remplir cette vue.`;
+    return `Aucune donnée pour ${label.toLowerCase()}.`;
   }
 
   return lines.join("\n");
@@ -288,56 +287,58 @@ function buildLeveledBody(label, collection) {
 function buildWallsBody(parsed) {
   const walls = parsed.walls || { total: 0, byLevel: {} };
   const byLevel = walls.byLevel || {};
+
   const entries = Object.entries(byLevel)
     .map(([level, count]) => [Number(level), Number(count)])
-    .filter(([, count]) => Number.isFinite(count) && count > 0)
+    .filter(([level, count]) => count > 0)
     .sort((a, b) => b[0] - a[0]);
 
   if (!entries.length) {
-    return "Aucune donnée de remparts trouvée dans cet import.";
+    return "Aucune donnée de remparts trouvée.";
   }
 
   return [
-    `**Total :** ${walls.total ?? 0}`,
+    `**Total :** ${walls.total ?? sumObjectValues(byLevel)}`,
     "",
     ...entries.map(([level, count]) => `Niveau ${level} • ${count}`)
   ].join("\n");
 }
 
-function buildUpgradesBody(parsed) {
+function buildUpgradesBody(parsed, progress) {
   return [
-    "Cette vue servira de **hub d’améliorations**.",
+    "**Progression par catégorie**",
     "",
-    `**HDV actuel :** ${parsed.townHall ?? "Inconnu"}`,
-    `**Héros connus :** ${parsed.heroesCount ?? countKeys(parsed.heroes)}`,
-    `**Troupes connues :** ${parsed.troopsCount ?? countKeys(parsed.troops)}`,
-    `**Sorts connus :** ${parsed.spellsCount ?? countKeys(parsed.spells)}`,
-    `**Familiers connus :** ${parsed.petsCount ?? countKeys(parsed.pets)}`,
-    `**Équipements connus :** ${parsed.equipmentCount ?? countKeys(parsed.equipment)}`,
-    `**Engins connus :** ${parsed.siegeMachinesCount ?? countKeys(parsed.siegeMachines)}`,
-    "",
-    "_La comparaison avec les niveaux max par HDV sera branchée plus tard._"
+    `👑 Héros : ${progress.heroes}%`,
+    `⚔️ Troupes : ${progress.troops}%`,
+    `🧪 Sorts : ${progress.spells}%`,
+    `🐾 Familiers : ${progress.pets}%`,
+    `🚀 Engins : ${progress.sieges}%`
   ].join("\n");
 }
 
 function formatLeveledEntries(collection) {
-  if (!collection || typeof collection !== "object") {
-    return [];
-  }
+  if (!collection || typeof collection !== "object") return [];
 
   return Object.entries(collection)
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([key, level]) => `**${humanizeKey(key)}** • ${level}`);
+    .map(([key, level]) => ({
+      key,
+      label: humanizeKey(key),
+      level: Number(level)
+    }))
+    .filter((entry) => Number.isFinite(entry.level))
+    .sort((a, b) => a.label.localeCompare(b.label, "fr"))
+    .map((entry) => `**${entry.label}** • ${entry.level}`);
 }
 
-function countKeys(collection) {
-  if (!collection || typeof collection !== "object") return 0;
-  return Object.keys(collection).length;
+function sumObjectValues(collection) {
+  if (!collection) return 0;
+  return Object.values(collection).reduce((t, v) => t + Number(v || 0), 0);
 }
 
 function humanizeKey(key) {
   return String(key)
-    .replace(/([A-Z])/g, " $1")
-    .replace(/^./, (char) => char.toUpperCase())
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (c) => c.toUpperCase())
     .trim();
 }

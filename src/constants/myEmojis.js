@@ -1,47 +1,181 @@
-const FALLBACK_EMOJI = "❌";
+/*
+Central emoji registry for /my feature
+Change emojis here only.
+Fallback emoji = ❌
+*/
+
+const FALLBACK = "❌";
 
 export const MY_EMOJIS = {
-  townHall: {
-    1: null,
-    2: null,
-    3: null,
-    4: null,
-    5: null,
-    6: null,
-    7: null,
-    8: null,
-    9: null,
-    10: null,
-    11: null,
-    12: null,
-    13: null,
-    14: null,
-    15: null,
-    16: null,
-    17: null,
-    18: null
-  },
 
-  heroes: {
-    barbarianKing: null,
-    archerQueen: null,
-    grandWarden: null,
-    royalChampion: null,
-    minionPrince: null,
-    dragonDuke: null,
-    battleMachine: null,
-    battleCopter: null
-  },
+/* ---------------- PROFILE GENERAL ---------------- */
 
-  misc: {
-    level: null,
-    clan: null,
-    league: null,
-    import: null
-  }
+misc: {
+profile: "👤",
+level: "⭐",
+clan: "🏰",
+league: "🏆",
+import: "📥",
+upgrades: "⬆️"
+},
+
+/* ---------------- NAVIGATION MENU ---------------- */
+
+menu: {
+overview: "📊",
+heroes: "👑",
+troops: "⚔️",
+spells: "🧪",
+pets: "🐾",
+sieges: "🚀",
+equipment: "🛡️",
+walls: "🧱",
+upgrades: "⬆️"
+},
+
+/* ---------------- TOWN HALL ---------------- */
+
+townHall: {
+18: "🏰",
+17: "🏯",
+16: "🏛️",
+15: "🏗️",
+14: "🏗️",
+13: "🏗️",
+12: "🏗️",
+11: "🏗️"
+},
+
+/* ---------------- HEROES ---------------- */
+
+heroes: {
+barbarianKing: "👑",
+archerQueen: "🏹",
+grandWarden: "🧙",
+royalChampion: "🛡️",
+minionPrince: "🦇",
+dragonDuke: "🐉",
+
+
+battleMachine: "🤖",
+battleCopter: "🚁"
+
+
+},
+
+/* ---------------- PETS ---------------- */
+
+pets: {
+lassi: "🐶",
+electroOwl: "🦉",
+mightyYak: "🐂",
+unicorn: "🦄",
+phoenix: "🔥",
+poisonLizard: "🦎",
+diggy: "🐹",
+frosty: "❄️"
+},
+
+/* ---------------- TROOPS ---------------- */
+
+troops: {
+barbarian: "🗡️",
+archer: "🏹",
+giant: "🗿",
+goblin: "🪙",
+wallBreaker: "💣",
+balloon: "🎈",
+wizard: "🧙",
+healer: "💖",
+dragon: "🐉",
+pekka: "🤖",
+babyDragon: "🐲",
+miner: "⛏️",
+electroDragon: "⚡",
+yeti: "❄️",
+dragonRider: "🐉",
+rootRider: "🌿",
+electroTitan: "⚡",
+apprenticeWarden: "🧙"
+},
+
+/* ---------------- SPELLS ---------------- */
+
+spells: {
+lightning: "⚡",
+heal: "💖",
+rage: "🔥",
+jump: "🦘",
+freeze: "❄️",
+clone: "🧬",
+invisibility: "👻",
+poison: "☠️",
+earthquake: "🌍",
+haste: "💨",
+skeleton: "💀",
+bat: "🦇"
+},
+
+/* ---------------- SIEGE MACHINES ---------------- */
+
+siegeMachines: {
+wallWrecker: "🚧",
+battleBlimp: "🎈",
+stoneSlammer: "🪨",
+siegeBarracks: "🏹",
+logLauncher: "🪵",
+flameFlinger: "🔥",
+battleDrill: "🛠️"
+},
+
+/* ---------------- EQUIPMENT ---------------- */
+
+equipment: {
+giantGauntlet: "🧤",
+rageVial: "🧪",
+vampstache: "🧛",
+earthquakeBoots: "🥾",
+spikyBall: "⚽",
+
+
+invisibilityVial: "👻",
+frozenArrow: "❄️",
+archerPuppet: "🏹",
+healerPuppet: "💖",
+magicMirror: "🪞",
+
+eternalTome: "📖",
+healingTome: "📘",
+rageGem: "💎",
+lifeGem: "💚",
+fireball: "🔥",
+
+royalGem: "💎",
+seekingShield: "🛡️",
+hogRiderPuppet: "🐗",
+hasteVial: "💨",
+electroBoots: "⚡",
+rocketShield: "🚀"
+
+
+}
+
 };
 
+/* -------------------------------------------------- */
+/* HELPER */
+/* -------------------------------------------------- */
+
 export function getEmoji(category, key) {
-  const value = MY_EMOJIS?.[category]?.[key];
-  return value || FALLBACK_EMOJI;
+
+if (!category) return FALLBACK;
+
+const group = MY_EMOJIS[category];
+
+if (!group) return FALLBACK;
+
+const emoji = group[key];
+
+return emoji ?? FALLBACK;
+
 }

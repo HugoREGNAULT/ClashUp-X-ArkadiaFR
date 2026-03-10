@@ -1,3 +1,4 @@
+/src/services/myIdResolverService.js
 const HERO_ID_MAP = {
   28000000: "barbarianking",
   28000001: "archerqueen",

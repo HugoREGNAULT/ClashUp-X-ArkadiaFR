@@ -1,11 +1,13 @@
+// /src/builders/myMessageBuilder.js
 import {
   ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
   ContainerBuilder,
   MessageFlags,
   SectionBuilder,
   SeparatorBuilder,
   SeparatorSpacingSize,
-  StringSelectMenuBuilder,
   TextDisplayBuilder,
   ThumbnailBuilder
 } from "discord.js";
@@ -147,6 +149,29 @@ export function buildMyNoProfileV2() {
   };
 }
 
+export function buildMyPlayerNotFoundV2(tag) {
+  const cleanTag = sanitizeTagToken(tag);
+
+  const container = new ContainerBuilder()
+    .setAccentColor(ACCENT_COLOR)
+    .addTextDisplayComponents(
+      new TextDisplayBuilder().setContent("## ❌ Joueur introuvable"),
+      new TextDisplayBuilder().setContent(
+        [
+          `Aucun joueur n’a été trouvé pour le tag **#${cleanTag || "?"}**.`,
+          "",
+          "Vérifie bien le tag saisi.",
+          "Ne confonds pas **O** et **0**."
+        ].join("\n")
+      )
+    );
+
+  return {
+    flags: MessageFlags.IsComponentsV2,
+    components: [container]
+  };
+}
+
 export function buildMySetMainSuccessV2({ tag, parsed }) {
   const container = new ContainerBuilder()
     .setAccentColor(ACCENT_COLOR)
@@ -167,45 +192,32 @@ export function buildMySetMainSuccessV2({ tag, parsed }) {
   };
 }
 
-export function buildMyUnauthorizedButtonV2() {
-  const container = new ContainerBuilder()
-    .setAccentColor(ACCENT_COLOR)
-    .addTextDisplayComponents(
-      new TextDisplayBuilder().setContent("## 🔒 Action non autorisée"),
-      new TextDisplayBuilder().setContent(
-        "Seul le propriétaire peut utiliser ce menu."
-      )
-    );
-
-  return {
-    flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral,
-    components: [container]
-  };
-}
-
 export function buildMyProfileViewV2({
-  ownerId,
-  currentView,
   parsed,
   apiPlayer,
   title,
-  body
+  sections = [],
+  apiUpdatedAt = null,
+  uploadUpdatedAt = null
 }) {
-  const thEmoji = getEmoji("townHall", parsed.townHall);
-  const levelEmoji = getEmoji("misc", "level");
-  const clanEmoji = getEmoji("misc", "clan");
-  const leagueEmoji = getEmoji("misc", "league");
-  const importEmoji = getEmoji("misc", "import");
+  const playerName = apiPlayer?.name || parsed?.playerName || "Inconnu";
+  const playerTag = apiPlayer?.tag || parsed?.playerTag || "Inconnu";
+  const playerUrl = apiPlayer?.tag
+    ? `https://link.clashofclans.com/?action=OpenPlayerProfile&tag=${sanitizeTagToken(apiPlayer.tag)}`
+    : null;
 
-  const playerName = apiPlayer?.name || parsed.playerName || "Inconnu";
-  const expLevel = apiPlayer?.expLevel ?? "Inconnu";
+  const thEmoji = getEmoji("townHall", String(parsed?.townHall ?? apiPlayer?.townHallLevel ?? ""));
+  const levelEmoji = getEmoji("misc", "level");
+  const leagueEmoji = getEmoji("misc", "league");
 
   const clanName = apiPlayer?.clan?.name || "Sans clan";
   const clanTag = apiPlayer?.clan?.tag || null;
   const clanUrl = clanTag
-    ? `https://link.clashofclans.com/?action=OpenClanProfile&tag=${clanTag.replace("#", "")}`
+    ? `https://link.clashofclans.com/?action=OpenClanProfile&tag=${sanitizeTagToken(clanTag)}`
     : null;
   const clanDisplay = clanUrl ? `[${clanName}](${clanUrl})` : clanName;
+
+  const roleLabel = getRoleLabel(apiPlayer?.role);
 
   const leagueName =
     apiPlayer?.leagueTier?.name ||
@@ -218,15 +230,12 @@ export function buildMyProfileViewV2({
     apiPlayer?.league?.iconUrls?.medium ||
     null;
 
-  const importTimestamp = toUnixTimestamp(parsed.lastSyncAt);
-
   const headerText = [
-    `**Pseudo :** ${playerName}`,
-    `**Tag :** ${parsed.playerTag}`,
-    `${thEmoji} **HDV :** ${parsed.townHall ?? "Inconnu"}`,
-    `${levelEmoji} **Niveau :** ${expLevel}`,
-    `${clanEmoji} **Clan :** ${clanDisplay}`,
-    `${leagueEmoji} **Ligue :** ${leagueName}`
+    `# ${playerName} (${clanDisplay} - ${roleLabel})`,
+    `⎬Identifiant : ${playerTag}`,
+    `⎬${levelEmoji} Niveau **${apiPlayer?.expLevel ?? "Inconnu"}**`,
+    `⎬${thEmoji} HDV **${parsed?.townHall ?? apiPlayer?.townHallLevel ?? "Inconnu"}**`,
+    `⎬${leagueEmoji} **${leagueName}**`
   ].join("\n");
 
   const headerSection = new SectionBuilder().addTextDisplayComponents(
@@ -246,52 +255,74 @@ export function buildMyProfileViewV2({
     .addTextDisplayComponents(
       new TextDisplayBuilder().setContent(`## 👤 ${title}`)
     )
-    .addSectionComponents(headerSection)
-    .addSeparatorComponents(
-      new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small).setDivider(true)
-    )
-    .addTextDisplayComponents(
-      new TextDisplayBuilder().setContent(body)
-    )
+    .addSectionComponents(headerSection);
+
+  for (const section of sections.filter(Boolean)) {
+    container.addSeparatorComponents(
+      new SeparatorBuilder()
+        .setSpacing(SeparatorSpacingSize.Large)
+        .setDivider(true)
+    );
+    container.addTextDisplayComponents(
+      new TextDisplayBuilder().setContent(section)
+    );
+  }
+
+  container
     .addSeparatorComponents(
       new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small).setDivider(true)
     )
     .addTextDisplayComponents(
       new TextDisplayBuilder().setContent(
-        importTimestamp
-          ? `-# ${importEmoji} Dernier import : <t:${importTimestamp}:R>`
-          : `-# ${importEmoji} Dernier import : inconnu`
+        [
+          apiUpdatedAt ? `-# Dernière mise à jour API : <t:${toUnixTimestamp(apiUpdatedAt)}:R>` : null,
+          uploadUpdatedAt
+            ? `-# ${getEmoji("misc", "import")} Dernier upload : <t:${toUnixTimestamp(uploadUpdatedAt)}:R>`
+            : `-# ${getEmoji("misc", "import")} Dernier upload : aucun`
+        ]
+          .filter(Boolean)
+          .join("\n")
       )
     );
 
-  const tagToken = sanitizeTagToken(parsed.playerTag);
+  const components = [container];
 
-  const menu = new StringSelectMenuBuilder()
-    .setCustomId(`my:profile-select:${ownerId}:${tagToken}`)
-    .setPlaceholder("Naviguer dans le profil")
-    .addOptions(
-      buildOption("overview", "Aperçu", currentView === "overview"),
-      buildOption("heroes", "Héros", currentView === "heroes"),
-      buildOption("troops", "Troupes", currentView === "troops"),
-      buildOption("spells", "Sorts", currentView === "spells"),
-      buildOption("pets", "Familiers", currentView === "pets"),
-      buildOption("guards", "Gardes", currentView === "guards"),
-      buildOption("sieges", "Engins", currentView === "sieges"),
-      buildOption("equipment", "Équipements", currentView === "equipment"),
-      buildOption("walls", "Remparts", currentView === "walls"),
-      buildOption("upgrades", "Améliorations", currentView === "upgrades")
+  const buttonRow = new ActionRowBuilder();
+
+  if (playerUrl) {
+    buttonRow.addComponents(
+      new ButtonBuilder()
+        .setStyle(ButtonStyle.Link)
+        .setLabel("Voir le joueur en jeu")
+        .setURL(playerUrl)
     );
+  }
 
-  const row = new ActionRowBuilder().addComponents(menu);
+  if (clanUrl) {
+    buttonRow.addComponents(
+      new ButtonBuilder()
+        .setStyle(ButtonStyle.Link)
+        .setLabel("Rejoindre le clan")
+        .setURL(clanUrl)
+    );
+  }
+
+  if (buttonRow.components.length > 0) {
+    components.push(buttonRow);
+  }
 
   return {
     flags: MessageFlags.IsComponentsV2,
-    components: [container, row]
+    components
   };
 }
 
-function buildOption(value, label, isDefault = false) {
-  return { label, value, default: isDefault };
+function getRoleLabel(role) {
+  if (role === "leader") return "Chef";
+  if (role === "coLeader") return "Adjoint";
+  if (role === "admin") return "Aîné";
+  if (role === "member") return "Membre";
+  return "Sans rôle";
 }
 
 function makeProgressBar(percent) {

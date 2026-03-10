@@ -1,3 +1,4 @@
+// /src/services/cocPlayerService.js
 import axios from "axios";
 
 export async function fetchPlayerFromAPI(playerTag, token) {
@@ -9,17 +10,26 @@ export async function fetchPlayerFromAPI(playerTag, token) {
     throw new Error("COC_API_TOKEN manquant.");
   }
 
-  const encodedTag = encodeURIComponent(String(playerTag).trim().toUpperCase());
+  const normalizedTag = String(playerTag).trim().toUpperCase();
+  const encodedTag = encodeURIComponent(normalizedTag);
 
-  const response = await axios.get(
-    `https://api.clashofclans.com/v1/players/${encodedTag}`,
-    {
-      headers: {
-        Authorization: `Bearer ${token}`
-      },
-      timeout: 15000
+  try {
+    const response = await axios.get(
+      `https://api.clashofclans.com/v1/players/${encodedTag}`,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`
+        },
+        timeout: 15000
+      }
+    );
+
+    return response.data;
+  } catch (error) {
+    if (error?.response?.status === 404) {
+      return null;
     }
-  );
 
-  return response.data;
+    throw error;
+  }
 }

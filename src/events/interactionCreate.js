@@ -1,74 +1,50 @@
+// /src/events/interactionCreate.js
 import { logCommandUsage, logCommandError } from "../services/logger.js";
 import {
-handleMyImport,
-handleMyProfile,
-handleMySetMain,
-handleMyProfileButton
+  handleMyImport,
+  handleMyProfile,
+  handleMySetMain
 } from "../services/myProfileService.js";
 
 export default {
-name: "interactionCreate",
+  name: "interactionCreate",
 
-async execute(interaction) {
+  async execute(interaction) {
+    try {
+      if (interaction.isChatInputCommand()) {
+        await logCommandUsage(interaction);
 
+        const { commandName } = interaction;
 
-try {
+        if (commandName === "my") {
+          const sub = interaction.options.getSubcommand();
 
-  /* ---------------- COMMANDES ---------------- */
+          if (sub === "import") {
+            return handleMyImport(interaction);
+          }
 
-  if (interaction.isChatInputCommand()) {
+          if (sub === "profile") {
+            return handleMyProfile(interaction);
+          }
 
-    await logCommandUsage(interaction);
+          if (sub === "setmain") {
+            return handleMySetMain(interaction);
+          }
+        }
 
-    const { commandName } = interaction;
+        return;
+      }
+    } catch (error) {
+      console.error("❌ Erreur interactionCreate :", error);
 
-    if (commandName === "my") {
-
-      const sub = interaction.options.getSubcommand();
-
-      if (sub === "import") {
-        return handleMyImport(interaction);
+      if (!interaction.replied && !interaction.deferred) {
+        await interaction.reply({
+          content: "Une erreur est survenue.",
+          ephemeral: true
+        });
       }
 
-      if (sub === "profile") {
-        return handleMyProfile(interaction);
-      }
-
-      if (sub === "setmain") {
-        return handleMySetMain(interaction);
-      }
-
+      await logCommandError(interaction, error);
     }
-
-    return;
   }
-
-  /* ---------------- MENUS / BOUTONS ---------------- */
-
-  if (interaction.isStringSelectMenu()) {
-
-    const handled = await handleMyProfileButton(interaction);
-
-    if (handled) return;
-
-  }
-
-} catch (error) {
-
-  console.error("❌ Erreur interactionCreate :", error);
-
-  if (!interaction.replied && !interaction.deferred) {
-
-    await interaction.reply({
-      content: "Une erreur est survenue.",
-      ephemeral: true
-    });
-
-  }
-
-  await logCommandError(interaction, error);
-
-}
-
-}
 };

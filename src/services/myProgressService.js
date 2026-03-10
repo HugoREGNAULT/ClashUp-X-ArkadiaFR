@@ -1,3 +1,4 @@
+// /src/services/myProgressService.js
 import fs from "fs";
 import path from "path";
 import { normalizeParsedVillage } from "./myIdResolverService.js";
@@ -54,9 +55,26 @@ function getMaxLevel(index, key, th) {
     return null;
   }
 
-  const max = entry.max_by_hdv[String(th)];
+  const exact = entry.max_by_hdv[String(th)];
+  if (Number.isFinite(Number(exact))) {
+    return Number(exact);
+  }
 
-  return Number.isFinite(Number(max)) ? Number(max) : null;
+  let best = null;
+
+  for (const [hdvKey, maxValue] of Object.entries(entry.max_by_hdv)) {
+    const hdv = Number(hdvKey);
+    const max = Number(maxValue);
+
+    if (!Number.isFinite(hdv) || !Number.isFinite(max)) continue;
+    if (hdv > th) continue;
+
+    if (best === null || hdv > best.hdv) {
+      best = { hdv, max };
+    }
+  }
+
+  return best?.max ?? null;
 }
 
 function computeProgressDetails(collection, index, th) {

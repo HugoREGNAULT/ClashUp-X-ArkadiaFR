@@ -1,3 +1,4 @@
+// /src/commands/my.js
 import { SlashCommandBuilder } from "discord.js";
 import { handleMyImport } from "../services/myImportService.js";
 import {
@@ -28,7 +29,7 @@ export const data = new SlashCommandBuilder()
   .addSubcommand((subcommand) =>
     subcommand
       .setName("profile")
-      .setDescription("Affiche ton profil Clash importé")
+      .setDescription("Affiche ton profil Clash")
       .addStringOption((option) =>
         option
           .setName("tag")

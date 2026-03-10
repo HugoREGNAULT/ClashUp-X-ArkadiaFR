@@ -1,3 +1,4 @@
+// /src/services/myProfileService.js
 import fs from "fs";
 import path from "path";
 import { MessageFlags } from "discord.js";
@@ -11,26 +12,14 @@ import {
 } from "./myStorageService.js";
 import {
   buildMyNoProfileV2,
+  buildMyPlayerNotFoundV2,
   buildMyProfileViewV2,
-  buildMySetMainSuccessV2,
-  buildMyUnauthorizedButtonV2
+  buildMySetMainSuccessV2
 } from "../builders/myMessageBuilder.js";
 import { logCommandError, logInfo } from "./logger.js";
 import { computeVillageProgress } from "./myProgressService.js";
 import { normalizeParsedVillage } from "./myIdResolverService.js";
-
-const VIEW_KEYS = new Set([
-  "overview",
-  "heroes",
-  "troops",
-  "spells",
-  "pets",
-  "guards",
-  "sieges",
-  "equipment",
-  "walls",
-  "upgrades"
-]);
+import { getProfileEmoji, getTownHallEmoji } from "../constants/myEmojis.js";
 
 const LEVELS_PATH = path.join(process.cwd(), "data", "coc_levels.json");
 
@@ -45,30 +34,39 @@ export async function handleMyProfile(interaction) {
   const requestedTag = interaction.options.getString("tag");
 
   try {
-    const context = await resolveProfileContext(interaction.user.id, requestedTag);
+    const context = await resolveProfileContext(
+      interaction.user.id,
+      requestedTag,
+      interaction.client.env.COC_API_TOKEN
+    );
 
     if (!context) {
       return interaction.reply(buildMyNoProfileV2());
     }
 
-    const parsed = normalizeParsedVillage(context.parsed);
+    if (!context.apiPlayer) {
+      return interaction.reply(buildMyPlayerNotFoundV2(context.tag));
+    }
 
-    const apiPlayer = await fetchPlayerFromAPI(
-      parsed.playerTag,
-      interaction.client.env.COC_API_TOKEN
-    );
+    const parsed = context.parsed
+      ? normalizeParsedVillage(context.parsed)
+      : buildApiOnlyParsed(context.apiPlayer);
 
     const progress = computeVillageProgress(parsed, parsed.townHall);
+    const sections = buildProfileSections({
+      parsed,
+      progress,
+      hasUpload: Boolean(context.parsed)
+    });
 
     return interaction.reply(
       buildMyProfileViewV2({
-        ownerId: interaction.user.id,
-        currentView: "overview",
-        profile: context.profile,
         parsed,
-        apiPlayer,
+        apiPlayer: context.apiPlayer,
         title: "Profil joueur",
-        body: buildOverviewBody(parsed, progress)
+        sections,
+        apiUpdatedAt: context.apiUpdatedAt,
+        uploadUpdatedAt: parsed.lastSyncAt || null
       })
     );
   } catch (error) {
@@ -115,408 +113,245 @@ export async function handleMySetMain(interaction) {
   }
 }
 
-export async function handleMyProfileButton(interaction) {
-  if (!interaction.isStringSelectMenu()) {
-    return false;
-  }
-
-  const parts = String(interaction.customId || "").split(":");
-
-  if (parts.length !== 4 || parts[0] !== "my" || parts[1] !== "profile-select") {
-    return false;
-  }
-
-  const ownerId = parts[2];
-  const tagToken = parts[3];
-  const view = interaction.values?.[0];
-
-  if (!VIEW_KEYS.has(view)) {
-    return false;
-  }
-
-  if (interaction.user.id !== ownerId) {
-    await interaction.reply(buildMyUnauthorizedButtonV2());
-    return true;
-  }
-
-  const tag = `#${tagToken}`;
-
-  try {
-    const profile = await getPlayerProfile(ownerId);
-    const storedParsed = await getParsedImport(ownerId, tag);
-
-    if (!profile || !storedParsed) {
-      await interaction.reply(buildMyNoProfileV2());
-      return true;
-    }
-
-    const parsed = normalizeParsedVillage(storedParsed);
-
-    const apiPlayer = await fetchPlayerFromAPI(
-      parsed.playerTag,
-      interaction.client.env.COC_API_TOKEN
-    );
-
-    const progress = computeVillageProgress(parsed, parsed.townHall);
-
-    await interaction.update(
-      buildMyProfileViewV2({
-        ownerId,
-        currentView: view,
-        profile,
-        parsed,
-        apiPlayer,
-        title: getViewTitle(view),
-        body: buildViewBody(view, parsed, progress)
-      })
-    );
-
-    return true;
-  } catch (error) {
-    console.error("[MY PROFILE MENU] Erreur :", error);
-
-    if (!interaction.replied && !interaction.deferred) {
-      await interaction.reply({
-        content: "Impossible de charger cette vue.",
-        flags: MessageFlags.Ephemeral
-      });
-    }
-
-    return true;
-  }
+export async function handleMyProfileButton() {
+  return false;
 }
 
-async function resolveProfileContext(discordId, requestedTag) {
-  const profile = await getPlayerProfile(discordId);
+async function resolveProfileContext(discordId, requestedTag, apiToken) {
+  const normalizedRequestedTag = sanitizeTag(requestedTag);
 
-  if (!profile) return null;
+  if (normalizedRequestedTag) {
+    const parsed = await getParsedImport(discordId, normalizedRequestedTag);
+    const apiPlayer = await fetchPlayerFromAPI(normalizedRequestedTag, apiToken);
 
-  if (requestedTag) {
-    const parsed = await getParsedImport(discordId, requestedTag);
-    if (!parsed) return null;
-
-    return { profile, parsed };
+    return {
+      profile: await getPlayerProfile(discordId),
+      parsed,
+      apiPlayer,
+      tag: normalizedRequestedTag,
+      apiUpdatedAt: new Date()
+    };
   }
+
+  const profile = await getPlayerProfile(discordId);
+  if (!profile) return null;
 
   const parsed = await getMainParsedImport(discordId);
   if (!parsed) return null;
 
-  return { profile, parsed };
+  const normalizedParsed = normalizeParsedVillage(parsed);
+  const apiPlayer = await fetchPlayerFromAPI(normalizedParsed.playerTag, apiToken);
+
+  return {
+    profile,
+    parsed: normalizedParsed,
+    apiPlayer,
+    tag: normalizedParsed.playerTag,
+    apiUpdatedAt: new Date()
+  };
 }
 
-function getViewTitle(view) {
-  switch (view) {
-    case "heroes":
-      return "Héros";
-    case "troops":
-      return "Troupes";
-    case "spells":
-      return "Sorts";
-    case "pets":
-      return "Familiers";
-    case "guards":
-      return "Gardes";
-    case "sieges":
-      return "Engins de siège";
-    case "equipment":
-      return "Équipements";
-    case "walls":
-      return "Remparts";
-    case "upgrades":
-      return "Améliorations";
-    default:
-      return "Profil joueur";
+function buildProfileSections({ parsed, progress, hasUpload }) {
+  const sections = [];
+  const townHall = Number(parsed?.townHall || 0);
+
+  if (!hasUpload) {
+    sections.push(
+      [
+        "📡 **Données API uniquement**",
+        "",
+        "Aucun upload JSON n’a été trouvé pour ce compte.",
+        "Utilise **/my import** pour afficher la progression détaillée du village."
+      ].join("\n")
+    );
+
+    sections.push(
+      [
+        "📊 **Aperçu**",
+        "",
+        "Aucune progression détaillée disponible sans upload."
+      ].join("\n")
+    );
+
+    return sections;
   }
-}
 
-function buildViewBody(view, parsed, progress) {
-  switch (view) {
-    case "overview":
-      return buildOverviewBody(parsed, progress);
-    case "heroes":
-      return buildHeroesBody(parsed);
-    case "troops":
-      return buildLeveledBody("Troupes", parsed.troops, "troops", parsed.townHall);
-    case "spells":
-      return buildLeveledBody("Sorts", parsed.spells, "spells", parsed.townHall);
-    case "pets":
-      return buildLeveledBody("Familiers", parsed.pets, "pets", parsed.townHall);
-    case "guards":
-      return buildLeveledBody("Gardes", parsed.guards, "guards", parsed.townHall);
-    case "sieges":
-      return buildLeveledBody("Engins de siège", parsed.siegeMachines, "sieges", parsed.townHall);
-    case "equipment":
-      return buildLeveledBody("Équipements", parsed.equipment, "equipment", parsed.townHall);
-    case "walls":
-      return buildWallsBody(parsed);
-    case "upgrades":
-      return buildUpgradesBody(parsed, progress);
-    default:
-      return buildOverviewBody(parsed, progress);
+  sections.push(buildHeroesSection(parsed, progress, townHall));
+  sections.push(buildCategorySection({
+    icon: "<:4_:1481034391772991559>",
+    title: "Troupes",
+    percent: progress.troops,
+    category: "troops",
+    collection: parsed.troops,
+    townHall,
+    itemsPerLine: 5
+  }));
+  sections.push(buildCategorySection({
+    icon: "<:3_:1481032721626300579>",
+    title: "Sorts",
+    percent: progress.spells,
+    category: "spells",
+    collection: parsed.spells,
+    townHall,
+    itemsPerLine: 5
+  }));
+  sections.push(buildCategorySection({
+    icon: "<:2_:1481028283427459082>",
+    title: "Engins de siège",
+    percent: progress.sieges,
+    category: "sieges",
+    collection: parsed.siegeMachines,
+    townHall,
+    itemsPerLine: 4
+  }));
+
+  if (hasUnlockedEntries("pets", townHall)) {
+    sections.push(buildCategorySection({
+      icon: "<:2_:1481028283427459082>",
+      title: "Familiers",
+      percent: progress.pets,
+      category: "pets",
+      collection: parsed.pets,
+      townHall,
+      itemsPerLine: 5
+    }));
   }
+
+  if (hasUnlockedEntries("guards", townHall)) {
+    sections.push(buildCategorySection({
+      icon: "<:2_:1481028283427459082>",
+      title: "Gardiens",
+      percent: progress.guards,
+      category: "guards",
+      collection: parsed.guards,
+      townHall,
+      itemsPerLine: 4
+    }));
+  }
+
+  sections.push(buildWallsSection(parsed));
+  sections.push(buildOverviewSection(progress, parsed, townHall));
+
+  return sections.filter(Boolean);
 }
 
-function buildOverviewBody(parsed, progress) {
-  const wallsTotal = parsed.walls?.total ?? sumObjectValues(parsed.walls?.byLevel);
+function buildHeroesSection(parsed, progress, townHall) {
+  const homeLines = formatDenseOverviewLines("heroes", parsed.heroes, townHall, 6);
+  const builderLines = formatBuilderHeroesDenseLines(parsed.builderHeroes);
 
   return [
-    "**Progression du village**",
-    "",
-    `👑 **Héros :** ${progress.heroes}%`,
-    `⚔️ **Troupes :** ${progress.troops}%`,
-    `🧪 **Sorts :** ${progress.spells}%`,
-    `🐾 **Familiers :** ${progress.pets}%`,
-    `🛡️ **Gardes :** ${progress.guards}%`,
-    `🚀 **Engins :** ${progress.sieges}%`,
-    "",
-    `🏰 **Village global :** ${progress.overall}%`,
-    `🧱 **Remparts détectés :** ${wallsTotal}`,
-    "",
-    "_Utilise le menu ci-dessous pour ouvrir le détail de chaque catégorie._"
+    `<:1_:1481026443470176409>〡Héros **${safePercent(progress.heroes)}%**`,
+    homeLines.length ? homeLines.join("\n") : "     ➥ Aucune donnée",
+    builderLines.length ? "" : null,
+    builderLines.length ? "⚙️ **Base des ouvriers**" : null,
+    ...builderLines
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+function buildCategorySection({ icon, title, percent, category, collection, townHall, itemsPerLine }) {
+  const lines = formatDenseOverviewLines(category, collection, townHall, itemsPerLine);
+
+  return [
+    `${icon}〡${title} **${safePercent(percent)}%**`,
+    lines.length ? lines.join("\n") : "     ➥ Aucune donnée"
   ].join("\n");
 }
 
-function buildHeroesBody(parsed) {
-  const homeHeroes = formatLeveledEntries(parsed.heroes, "heroes", parsed.townHall);
-  const builderHeroes = formatLeveledEntries(parsed.builderHeroes, "builderHeroes", parsed.townHall);
-
-  if (!homeHeroes.length && !builderHeroes.length) {
-    return "Aucun héros trouvé dans le dernier import.";
-  }
+function buildWallsSection(parsed) {
+  const total = parsed?.walls?.total ?? sumObjectValues(parsed?.walls?.byLevel);
 
   return [
-    "**Village principal**",
-    homeHeroes.length ? homeHeroes.join("\n") : "_Aucune donnée_",
-    "",
-    "**Base des ouvriers**",
-    builderHeroes.length ? builderHeroes.join("\n") : "_Aucune donnée_"
+    "🧱〡Remparts",
+    `     ➥ ${total || 0} détectés`
   ].join("\n");
 }
 
-function buildLeveledBody(label, collection, category, townHall) {
-  const lines = formatLeveledEntries(collection, category, townHall);
+function buildOverviewSection(progress, parsed, townHall) {
+  const lines = [
+    "📊〡Aperçu global",
+    `     ➥ Héros **${safePercent(progress.heroes)}%** • Troupes **${safePercent(progress.troops)}%** • Sorts **${safePercent(progress.spells)}%**`,
+    `           Familiers **${safePercent(progress.pets)}%** • Engins **${safePercent(progress.sieges)}%**`
+  ];
 
-  if (!lines.length) {
-    return `Aucune donnée pour ${label.toLowerCase()}.`;
+  if (hasUnlockedEntries("guards", townHall)) {
+    lines.push(`           Gardiens **${safePercent(progress.guards)}%**`);
   }
+
+  const total = parsed?.walls?.total ?? sumObjectValues(parsed?.walls?.byLevel);
+  if (total > 0) {
+    lines.push(`           Remparts **${total}**`);
+  }
+
+  lines.push(`           Village global **${safePercent(progress.overall)}%**`);
 
   return lines.join("\n");
 }
 
-function buildWallsBody(parsed) {
-  const walls = parsed.walls || { total: 0, byLevel: {} };
-  const byLevel = walls.byLevel || {};
+function formatDenseOverviewLines(category, collection, townHall, itemsPerLine) {
+  const index = getEntriesForCategory(category);
+  const items = [];
 
-  const entries = Object.entries(byLevel)
-    .map(([level, count]) => [Number(level), Number(count)])
-    .filter(([level, count]) => count > 0)
-    .sort((a, b) => b[0] - a[0]);
+  for (const entry of index.entries) {
+    const maxLevel = getMaxFromEntry(entry, townHall);
+    if (!Number.isFinite(maxLevel) || maxLevel <= 0) continue;
 
-  if (!entries.length) {
-    return "Aucune donnée de remparts trouvée.";
+    const key = String(entry.api_name || "").toLowerCase();
+    const currentLevel = Number(collection?.[key]);
+    const emoji = getResolvedEmoji(category, key, entry?.emoji_markdown);
+
+    items.push(`${emoji} \`${Number.isFinite(currentLevel) ? currentLevel : "?"}/${maxLevel}\``);
   }
 
-  return [
-    `**Total :** ${walls.total ?? sumObjectValues(byLevel)}`,
-    "",
-    ...entries.map(([level, count]) => `🧱 Niveau ${level} • ${count}`)
-  ].join("\n");
+  return chunk(items, itemsPerLine).map((group, lineIndex) => {
+    const prefix = lineIndex === 0 ? "     ➥ " : "           ";
+    return `${prefix}${group.join("  ")}`;
+  });
 }
 
-function buildUpgradesBody(parsed, progress) {
-  const lines = formatUpgradeEntries(parsed);
-
-  if (!lines.length) {
-    return [
-      "**Progression par catégorie**",
-      "",
-      `👑 Héros : ${progress.heroes}%`,
-      `⚔️ Troupes : ${progress.troops}%`,
-      `🧪 Sorts : ${progress.spells}%`,
-      `🐾 Familiers : ${progress.pets}%`,
-      `🛡️ Gardes : ${progress.guards}%`,
-      `🚀 Engins : ${progress.sieges}%`,
-      "",
-      `🏰 Village global : ${progress.overall}%`,
-      "",
-      "_Aucune amélioration en cours détectée._"
-    ].join("\n");
-  }
-
-  return [
-    "**Améliorations en cours**",
-    "",
-    ...lines
-  ].join("\n");
-}
-
-function formatLeveledEntries(collection, category, townHall) {
+function formatBuilderHeroesDenseLines(collection) {
   if (!collection || typeof collection !== "object") return [];
 
-  return Object.entries(collection)
-    .map(([key, level]) => {
-      const numericLevel = Number(level);
-      const display = getDisplayData(category, key, townHall);
-      const maxLevel = getMaxForCategory(category, key, townHall);
+  const entries = [];
+  const machine = Number(collection.battlemachine);
+  const copter = Number(collection.battlecopter);
 
-      return {
-        level: numericLevel,
-        order: display.order,
-        text: `${display.prefix} ${formatLevelProgress(numericLevel, maxLevel)}`
-      };
-    })
-    .filter((entry) => Number.isFinite(entry.level))
-    .sort((a, b) => a.order - b.order)
-    .map((entry) => entry.text);
+  if (Number.isFinite(machine)) {
+    entries.push(`${getProfileEmoji("builderHeroes", "battlemachine")} \`${machine}/?\``);
+  }
+
+  if (Number.isFinite(copter)) {
+    entries.push(`${getProfileEmoji("builderHeroes", "battlecopter")} \`${copter}/?\``);
+  }
+
+  return chunk(entries, 4).map((group, index) => {
+    const prefix = index === 0 ? "     ➥ " : "           ";
+    return `${prefix}${group.join("  ")}`;
+  });
 }
 
-function formatUpgradeEntries(parsed) {
-  const upgrades = Array.isArray(parsed?.upgrades) ? parsed.upgrades : [];
-
-  return upgrades
-    .map((upgrade) => {
-      const display = getDisplayData(upgrade.category, upgrade.key, parsed.townHall);
-      const currentLevel = Number(upgrade.level);
-      const maxLevel = getMaxForCategory(upgrade.category, upgrade.key, parsed.townHall);
-      const progressText = Number.isFinite(currentLevel)
-        ? formatLevelProgress(currentLevel, maxLevel)
-        : "";
-
-      const parts = [display.prefix];
-
-      if (progressText) {
-        parts.push(progressText);
-      }
-
-      if (upgrade.timer > 0) {
-        parts.push(`⏳ ${formatDuration(upgrade.timer)}`);
-      }
-
-      if (upgrade.helperTimer > 0) {
-        parts.push(`🧑‍🔧 ${formatDuration(upgrade.helperTimer)}`);
-      }
-
-      if (upgrade.helperCooldown > 0) {
-        parts.push(`🔁 ${formatDuration(upgrade.helperCooldown)}`);
-      }
-
-      return {
-        order: display.order,
-        timer: Number(upgrade.timer || 0),
-        line: parts.join(" ")
-      };
-    })
-    .sort((a, b) => {
-      if (a.timer > 0 && b.timer > 0) return a.timer - b.timer;
-      if (a.timer > 0) return -1;
-      if (b.timer > 0) return 1;
-      return a.order - b.order;
-    })
-    .map((entry) => entry.line);
+function getResolvedEmoji(category, key, fallbackEmojiMarkdown) {
+  const fallback = isValidEmojiMarkdown(fallbackEmojiMarkdown) ? fallbackEmojiMarkdown : "❓";
+  return getProfileEmoji(category, key, fallback);
 }
 
-function getDisplayData(category, key, townHall) {
+function isValidEmojiMarkdown(value) {
+  const text = String(value || "").trim();
+  return /^<a?:[A-Za-z0-9_~\-]+:\d+>$/.test(text);
+}
+
+function getEntriesForCategory(category) {
   const display = getDisplayIndexes();
-  const normalizedKey = String(key).toLowerCase();
 
-  if (category === "heroes") {
-    const meta = display.heroes.meta.get(normalizedKey);
-    if (meta) return makeDisplayLine(meta, display.heroes.order.get(normalizedKey));
-  }
+  if (category === "heroes") return display.heroes;
+  if (category === "troops") return display.troops;
+  if (category === "spells") return display.spells;
+  if (category === "pets") return display.pets;
+  if (category === "guards") return display.guards;
+  if (category === "sieges") return display.sieges;
 
-  if (category === "troops") {
-    const meta = display.troops.meta.get(normalizedKey);
-    if (meta) return makeDisplayLine(meta, display.troops.order.get(normalizedKey));
-  }
-
-  if (category === "spells") {
-    const meta = display.spells.meta.get(normalizedKey);
-    if (meta) return makeDisplayLine(meta, display.spells.order.get(normalizedKey));
-  }
-
-  if (category === "pets") {
-    const meta = display.pets.meta.get(normalizedKey);
-    if (meta) return makeDisplayLine(meta, display.pets.order.get(normalizedKey));
-  }
-
-  if (category === "guards") {
-    const meta = display.guards.meta.get(normalizedKey);
-    if (meta) return makeDisplayLine(meta, display.guards.order.get(normalizedKey));
-  }
-
-  if (category === "sieges") {
-    const meta = display.sieges.meta.get(normalizedKey);
-    if (meta) return makeDisplayLine(meta, display.sieges.order.get(normalizedKey));
-  }
-
-  if (category === "builderHeroes") {
-    if (normalizedKey === "battlemachine") {
-      return {
-        order: 0,
-        prefix: "⚙️ ・ Machine de combat"
-      };
-    }
-
-    if (normalizedKey === "battlecopter") {
-      return {
-        order: 1,
-        prefix: "🚁 ・ Hélicoptère de combat"
-      };
-    }
-  }
-
-  return {
-    order: 999999,
-    prefix: `❓ ・ ${humanizeKey(key)}`
-  };
-}
-
-function makeDisplayLine(entry, order) {
-  const emoji = String(entry?.emoji_markdown ?? "").trim() || "❓";
-  const label = String(entry?.name_fr || entry?.name_en || entry?.api_label || entry?.api_name || "Inconnu").trim();
-
-  return {
-    order: Number.isFinite(Number(order)) ? Number(order) : 999999,
-    prefix: `${emoji} ・ ${label}`
-  };
-}
-
-function formatLevelProgress(currentLevel, maxLevel) {
-  if (!Number.isFinite(Number(currentLevel))) {
-    return "";
-  }
-
-  if (!Number.isFinite(Number(maxLevel)) || Number(maxLevel) <= 0) {
-    return `\`${currentLevel}/?\``;
-  }
-
-  return `\`${currentLevel}/${maxLevel}\``;
-}
-
-function getMaxForCategory(category, key, townHall) {
-  const indexes = getDisplayIndexes();
-  const normalizedKey = String(key).toLowerCase();
-  const th = Number(townHall);
-
-  if (!Number.isFinite(th)) {
-    return null;
-  }
-
-  let entry = null;
-
-  if (category === "heroes") entry = indexes.heroes.meta.get(normalizedKey);
-  else if (category === "troops") entry = indexes.troops.meta.get(normalizedKey);
-  else if (category === "spells") entry = indexes.spells.meta.get(normalizedKey);
-  else if (category === "pets") entry = indexes.pets.meta.get(normalizedKey);
-  else if (category === "guards") entry = indexes.guards.meta.get(normalizedKey);
-  else if (category === "sieges") entry = indexes.sieges.meta.get(normalizedKey);
-
-  if (!entry?.max_by_hdv) {
-    return null;
-  }
-
-  const value = entry.max_by_hdv[String(th)];
-  return Number.isFinite(Number(value)) ? Number(value) : null;
+  return { entries: [], meta: new Map(), order: new Map() };
 }
 
 function getDisplayIndexes() {
@@ -539,6 +374,7 @@ function getDisplayIndexes() {
 function makeOrderedIndex(entries) {
   const meta = new Map();
   const order = new Map();
+  const list = [];
 
   for (const [index, entry] of (entries ?? []).entries()) {
     if (!entry?.api_name) continue;
@@ -546,9 +382,10 @@ function makeOrderedIndex(entries) {
     const key = String(entry.api_name).toLowerCase();
     meta.set(key, entry);
     order.set(key, index);
+    list.push(entry);
   }
 
-  return { meta, order };
+  return { meta, order, entries: list };
 }
 
 function loadLevels() {
@@ -559,35 +396,91 @@ function loadLevels() {
   return LEVELS_CACHE;
 }
 
-function formatDuration(totalSeconds) {
-  const seconds = Math.max(0, Number(totalSeconds) || 0);
-
-  const days = Math.floor(seconds / 86400);
-  const hours = Math.floor((seconds % 86400) / 3600);
-  const minutes = Math.floor((seconds % 3600) / 60);
-
-  const parts = [];
-
-  if (days > 0) parts.push(`${days}j`);
-  if (hours > 0) parts.push(`${hours}h`);
-  if (minutes > 0) parts.push(`${minutes}m`);
-
-  if (!parts.length) {
-    return `${seconds}s`;
+function getMaxFromEntry(entry, townHall) {
+  if (!entry?.max_by_hdv) {
+    return null;
   }
 
-  return parts.slice(0, 2).join(" ");
+  const exact = entry.max_by_hdv[String(townHall)];
+  if (Number.isFinite(Number(exact))) {
+    return Number(exact);
+  }
+
+  let best = null;
+
+  for (const [hdvKey, maxValue] of Object.entries(entry.max_by_hdv)) {
+    const hdv = Number(hdvKey);
+    const max = Number(maxValue);
+
+    if (!Number.isFinite(hdv) || !Number.isFinite(max)) continue;
+    if (hdv > townHall) continue;
+
+    if (best === null || hdv > best.hdv) {
+      best = { hdv, max };
+    }
+  }
+
+  return best?.max ?? null;
+}
+
+function hasUnlockedEntries(category, townHall) {
+  const index = getEntriesForCategory(category);
+  return index.entries.some((entry) => {
+    const max = getMaxFromEntry(entry, townHall);
+    return Number.isFinite(max) && max > 0;
+  });
+}
+
+function chunk(array, size) {
+  const output = [];
+  for (let i = 0; i < array.length; i += size) {
+    output.push(array.slice(i, i + size));
+  }
+  return output;
 }
 
 function sumObjectValues(collection) {
   if (!collection) return 0;
-  return Object.values(collection).reduce((t, v) => t + Number(v || 0), 0);
+  return Object.values(collection).reduce((total, value) => total + Number(value || 0), 0);
 }
 
-function humanizeKey(key) {
-  return String(key)
-    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
-    .replace(/_/g, " ")
-    .replace(/\b\w/g, (c) => c.toUpperCase())
-    .trim();
+function safePercent(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return 0;
+  return Math.max(0, Math.min(100, Math.round(number)));
+}
+
+function sanitizeTag(tag) {
+  const clean = String(tag || "")
+    .trim()
+    .replace(/^#/, "")
+    .replace(/[^A-Z0-9]/gi, "")
+    .toUpperCase();
+
+  return clean ? `#${clean}` : null;
+}
+
+function buildApiOnlyParsed(apiPlayer) {
+  const townHall = Number(apiPlayer?.townHallLevel || 0);
+
+  return {
+    playerTag: apiPlayer?.tag || null,
+    playerName: apiPlayer?.name || "Inconnu",
+    townHall,
+    townHallEmoji: getTownHallEmoji(townHall),
+    heroes: {},
+    builderHeroes: {},
+    troops: {},
+    spells: {},
+    pets: {},
+    guards: {},
+    equipment: {},
+    siegeMachines: {},
+    walls: {
+      total: 0,
+      byLevel: {}
+    },
+    upgrades: [],
+    lastSyncAt: null
+  };
 }

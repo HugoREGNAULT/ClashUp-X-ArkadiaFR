@@ -1,15 +1,11 @@
 import {
   ActionRowBuilder,
-  ButtonBuilder,
-  ButtonStyle,
   ContainerBuilder,
   MessageFlags,
-  SectionBuilder,
   SeparatorBuilder,
   SeparatorSpacingSize,
   StringSelectMenuBuilder,
-  TextDisplayBuilder,
-  ThumbnailBuilder
+  TextDisplayBuilder
 } from "discord.js";
 import { getEmoji } from "../constants/myEmojis.js";
 
@@ -205,7 +201,6 @@ export function buildMyUnauthorizedButtonV2() {
 export function buildMyProfileViewV2({
   ownerId,
   currentView,
-  profile,
   parsed,
   apiPlayer,
   title,
@@ -215,11 +210,6 @@ export function buildMyProfileViewV2({
   const levelEmoji = getEmoji("misc", "level");
   const clanEmoji = getEmoji("misc", "clan");
   const importEmoji = getEmoji("misc", "import");
-
-  const leagueBadge =
-    apiPlayer?.league?.iconUrls?.medium ||
-    apiPlayer?.league?.iconUrls?.small ||
-    null;
 
   const playerName = apiPlayer?.name || parsed.playerName || "Inconnu";
   const expLevel = apiPlayer?.expLevel ?? "Inconnu";
@@ -231,39 +221,43 @@ export function buildMyProfileViewV2({
     : null;
   const clanDisplay = clanUrl ? `[${clanName}](${clanUrl})` : clanName;
 
+  const leagueName = apiPlayer?.league?.name || "Sans ligue";
+  const leagueBadge =
+    apiPlayer?.league?.iconUrls?.medium ||
+    apiPlayer?.league?.iconUrls?.small ||
+    null;
+
   const importTimestamp = toUnixTimestamp(parsed.lastSyncAt);
 
-  const section = new SectionBuilder().addTextDisplayComponents(
-    new TextDisplayBuilder().setContent(`## 👤 ${title}`),
-    new TextDisplayBuilder().setContent(
-      [
-        `**Pseudo :** ${playerName}`,
-        `**Tag :** ${parsed.playerTag}`,
-        `${thEmoji} **HDV :** ${parsed.townHall ?? "Inconnu"}`,
-        `${levelEmoji} **Niveau :** ${expLevel}`,
-        `${clanEmoji} **Clan :** ${clanDisplay}`,
-        importTimestamp
-          ? `-# ${importEmoji} Dernier import : <t:${importTimestamp}:R>`
-          : `-# ${importEmoji} Dernier import : inconnu`
-      ].join("\n")
-    )
-  );
-
-  if (leagueBadge) {
-    section.setThumbnailAccessory(
-      new ThumbnailBuilder().setURL(leagueBadge)
-    );
-  }
+  const topText = [
+    `**Pseudo :** ${playerName}`,
+    `**Tag :** ${parsed.playerTag}`,
+    `${thEmoji} **HDV :** ${parsed.townHall ?? "Inconnu"}`,
+    `${levelEmoji} **Niveau :** ${expLevel}`,
+    `${clanEmoji} **Clan :** ${clanDisplay}`,
+    `**Ligue :** ${leagueName}`,
+    leagueBadge ? `**Badge :** ${leagueBadge}` : null,
+    importTimestamp
+      ? `-# ${importEmoji} Dernier import : <t:${importTimestamp}:R>`
+      : `-# ${importEmoji} Dernier import : inconnu`
+  ]
+    .filter(Boolean)
+    .join("\n");
 
   const container = new ContainerBuilder()
     .setAccentColor(ACCENT_COLOR)
-    .addSectionComponents(section)
+    .addTextDisplayComponents(
+      new TextDisplayBuilder().setContent(`## 👤 ${title}`),
+      new TextDisplayBuilder().setContent(topText)
+    )
     .addSeparatorComponents(
       new SeparatorBuilder()
         .setSpacing(SeparatorSpacingSize.Small)
         .setDivider(true)
     )
-    .addTextDisplayComponents(new TextDisplayBuilder().setContent(body));
+    .addTextDisplayComponents(
+      new TextDisplayBuilder().setContent(body)
+    );
 
   const tagToken = sanitizeTagToken(parsed.playerTag);
 

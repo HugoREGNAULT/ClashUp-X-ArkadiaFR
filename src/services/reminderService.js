@@ -1,5 +1,4 @@
 import crypto from "crypto";
-import { EmbedBuilder } from "discord.js";
 import { parseDurationToSeconds, formatDurationFR } from "./timeParser.js";
 import {
   addReminder,
@@ -7,8 +6,11 @@ import {
   removeReminderById
 } from "./reminderStore.js";
 import { logBotError, logInfo } from "./logger.js";
-
-const EMBED_COLOR = 0xA8DCFF;
+import {
+  buildReminderCreatedV2,
+  buildReminderDmV2,
+  buildReminderFallbackV2
+} from "../builders/reminderMessageBuilder.js";
 
 function createReminderId() {
   return `rem_${crypto.randomBytes(6).toString("hex")}`;
@@ -49,40 +51,14 @@ export async function createReminderFromInteraction(interaction) {
 
   addReminder(reminder);
 
-  const embed = new EmbedBuilder()
-    .setColor(EMBED_COLOR)
-    .setTitle("⏰ Reminder enregistré")
-    .addFields(
-      {
-        name: "Message",
-        value: message,
-        inline: false
-      },
-      {
-        name: "Compte",
-        value: pseudo || "Non renseigné",
-        inline: true
-      },
-      {
-        name: "Durée",
-        value: formatDurationFR(durationSeconds),
-        inline: true
-      },
-      {
-        name: "Rappel prévu",
-        value: `<t:${remindAt}:F>\n<t:${remindAt}:R>`,
-        inline: false
-      }
-    )
-    .setFooter({
-      text: dmAvailable
-        ? "Le rappel sera envoyé en message privé. Si l’envoi échoue, il sera envoyé dans ce salon."
-        : "Je n’ai pas pu confirmer tes MP. Si le MP échoue, le rappel sera envoyé dans ce salon."
-    })
-    .setTimestamp();
-
   await interaction.reply({
-    embeds: [embed],
+    ...buildReminderCreatedV2({
+      message,
+      pseudo,
+      durationLabel: formatDurationFR(durationSeconds),
+      remindAt,
+      dmAvailable
+    }),
     ephemeral: true
   });
 
@@ -110,36 +86,10 @@ export async function processDueReminders(client) {
   for (const reminder of dueReminders) {
     try {
       const user = await client.users.fetch(reminder.userId);
-
-      const embed = new EmbedBuilder()
-        .setColor(EMBED_COLOR)
-        .setTitle("⏰ Rappel Clash of Clans")
-        .addFields(
-          {
-            name: "Message",
-            value: reminder.message,
-            inline: false
-          },
-          {
-            name: "Compte",
-            value: reminder.pseudo || "Non renseigné",
-            inline: true
-          },
-          {
-            name: "Prévu pour",
-            value: `<t:${reminder.remindAt}:F>`,
-            inline: true
-          }
-        )
-        .setFooter({
-          text: "Arcadia Reminder"
-        })
-        .setTimestamp();
-
       let sent = false;
 
       try {
-        await user.send({ embeds: [embed] });
+        await user.send(buildReminderDmV2(reminder));
         sent = true;
       } catch (dmError) {
         console.warn(
@@ -153,11 +103,7 @@ export async function processDueReminders(client) {
             if (channel && channel.isTextBased()) {
               await channel.send({
                 content: `<@${reminder.userId}>`,
-                embeds: [
-                  EmbedBuilder.from(embed).setFooter({
-                    text: "MP indisponible : rappel envoyé dans le salon d'origine"
-                  })
-                ]
+                ...buildReminderFallbackV2(reminder)
               });
               sent = true;
             }

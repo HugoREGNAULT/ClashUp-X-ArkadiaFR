@@ -1,4 +1,4 @@
-import { MessageFlags, SlashCommandBuilder } from "discord.js";
+import { SlashCommandBuilder } from "discord.js";
 import { handleMyImport } from "../services/myImportService.js";
 
 export const data = new SlashCommandBuilder()
@@ -11,8 +11,14 @@ export const data = new SlashCommandBuilder()
       .addAttachmentOption((option) =>
         option
           .setName("file")
-          .setDescription("Le fichier JSON à importer")
-          .setRequired(true)
+          .setDescription("Fichier JSON à importer")
+          .setRequired(false)
+      )
+      .addStringOption((option) =>
+        option
+          .setName("message")
+          .setDescription("Lien ou ID d’un message Discord contenant le JSON")
+          .setRequired(false)
       )
   );
 
@@ -24,8 +30,7 @@ export async function execute(interaction) {
   }
 
   return interaction.reply({
-    content: "Sous-commande inconnue.",
-    flags: MessageFlags.Ephemeral
+    content: "Sous-commande inconnue."
   });
 }
 

@@ -230,7 +230,6 @@ function buildProfileSections({ parsed, progress, hasUpload }) {
   }
 
   sections.push(buildWallsSection(parsed));
-  sections.push(buildOverviewSection(progress, parsed, townHall));
 
   return sections.filter(Boolean);
 }

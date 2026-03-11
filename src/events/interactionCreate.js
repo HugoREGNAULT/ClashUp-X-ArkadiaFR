@@ -1,50 +1,44 @@
-// /src/events/interactionCreate.js
-import { logCommandUsage, logCommandError } from "../services/logger.js";
-import {
-  handleMyImport,
-  handleMyProfile,
-  handleMySetMain
-} from "../services/myProfileService.js";
-
 export default {
   name: "interactionCreate",
 
-  async execute(interaction) {
+  async execute(interaction, client) {
     try {
       if (interaction.isChatInputCommand()) {
-        await logCommandUsage(interaction);
+        const command = client.commands.get(interaction.commandName);
 
-        const { commandName } = interaction;
-
-        if (commandName === "my") {
-          const sub = interaction.options.getSubcommand();
-
-          if (sub === "import") {
-            return handleMyImport(interaction);
-          }
-
-          if (sub === "profile") {
-            return handleMyProfile(interaction);
-          }
-
-          if (sub === "setmain") {
-            return handleMySetMain(interaction);
-          }
+        if (!command) {
+          console.warn(`[INTERACTION] Commande inconnue: ${interaction.commandName}`);
+          return;
         }
 
+        await command.execute(interaction);
+        return;
+      }
+
+      if (interaction.isStringSelectMenu()) {
+        return;
+      }
+
+      if (interaction.isButton()) {
         return;
       }
     } catch (error) {
-      console.error("❌ Erreur interactionCreate :", error);
+      console.error("[INTERACTION] Erreur:", error);
 
-      if (!interaction.replied && !interaction.deferred) {
-        await interaction.reply({
-          content: "Une erreur est survenue.",
-          ephemeral: true
-        });
+      try {
+        if (interaction.deferred || interaction.replied) {
+          await interaction.editReply({
+            content: "❌ Une erreur est survenue pendant l'exécution de la commande."
+          });
+        } else if (interaction.isRepliable()) {
+          await interaction.reply({
+            content: "❌ Une erreur est survenue pendant l'exécution de la commande.",
+            ephemeral: true
+          });
+        }
+      } catch (replyError) {
+        console.error("[INTERACTION] Impossible d'envoyer le message d'erreur:", replyError);
       }
-
-      await logCommandError(interaction, error);
     }
   }
 };

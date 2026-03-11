@@ -231,11 +231,9 @@ export function buildMyProfileViewV2({
     null;
 
   const headerText = [
-    `# ${playerName} (${clanDisplay} - ${roleLabel})`,
-    `⎬Identifiant : ${playerTag}`,
-    `⎬${levelEmoji} Niveau **${apiPlayer?.expLevel ?? "Inconnu"}**`,
-    `⎬${thEmoji} HDV **${parsed?.townHall ?? apiPlayer?.townHallLevel ?? "Inconnu"}**`,
-    `⎬${leagueEmoji} **${leagueName}**`
+      `  ⎬ Identifiant (TAG) : \`${playerTag}\``,
+      ` ⎬ Niveau **${apiPlayer?.expLevel ?? "Inconnu"}**`,
+      ` ⎬ HDV **${parsed?.townHall ?? apiPlayer?.townHallLevel ?? "Inconnu"}**`
   ].join("\n");
 
   const headerSection = new SectionBuilder().addTextDisplayComponents(
@@ -253,7 +251,7 @@ export function buildMyProfileViewV2({
   const container = new ContainerBuilder()
     .setAccentColor(ACCENT_COLOR)
     .addTextDisplayComponents(
-      new TextDisplayBuilder().setContent(`## 👤 ${title}`)
+      new TextDisplayBuilder().setContent(`# ${playerName} (${clanDisplay} - ${roleLabel})`)
     )
     .addSectionComponents(headerSection);
 

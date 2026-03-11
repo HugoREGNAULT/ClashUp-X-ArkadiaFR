@@ -1,72 +1,94 @@
-// /src/commands/my.js
 import { SlashCommandBuilder } from "discord.js";
-import { handleMyImport } from "../services/myImportService.js";
-import {
-  handleMyProfile,
-  handleMySetMain
-} from "../services/myProfileService.js";
+import { createImportSession } from "../services/importWebService.js";
+import { handleMyProfile } from "../services/myProfileService.js";
 
-export const data = new SlashCommandBuilder()
+const data = new SlashCommandBuilder()
   .setName("my")
-  .setDescription("Gère tes imports personnels Clash of Clans")
-  .addSubcommand((subcommand) =>
-    subcommand
+  .setDescription("Gestion de ton profil Clash")
+  .addSubcommand((sub) =>
+    sub
       .setName("import")
-      .setDescription("Importe un export JSON Clash of Clans")
-      .addAttachmentOption((option) =>
-        option
-          .setName("file")
-          .setDescription("Fichier JSON à importer")
-          .setRequired(false)
-      )
-      .addStringOption((option) =>
-        option
-          .setName("message")
-          .setDescription("Lien ou ID d’un message Discord contenant le JSON")
-          .setRequired(false)
-      )
+      .setDescription("Importer ton export Clash via ClashUp")
   )
-  .addSubcommand((subcommand) =>
-    subcommand
+  .addSubcommand((sub) =>
+    sub
       .setName("profile")
-      .setDescription("Affiche ton profil Clash")
-      .addStringOption((option) =>
-        option
+      .setDescription("Voir ton profil Clash")
+      .addStringOption((opt) =>
+        opt
           .setName("tag")
-          .setDescription("Tag du compte à afficher (sinon compte principal)")
+          .setDescription("Tag du joueur")
           .setRequired(false)
       )
   )
-  .addSubcommand((subcommand) =>
-    subcommand
+  .addSubcommand((sub) =>
+    sub
       .setName("setmain")
-      .setDescription("Définit ton compte principal")
-      .addStringOption((option) =>
-        option
+      .setDescription("Définir ton compte principal")
+      .addStringOption((opt) =>
+        opt
           .setName("tag")
-          .setDescription("Tag du compte à définir comme principal")
+          .setDescription("Tag du joueur")
           .setRequired(true)
       )
   );
 
-export async function execute(interaction) {
-  const subcommand = interaction.options.getSubcommand();
+async function execute(interaction) {
+  console.log("[MY COMMAND] Nouvelle version ClashUp import chargée");
 
-  if (subcommand === "import") {
-    return handleMyImport(interaction);
+  const sub = interaction.options.getSubcommand();
+
+  switch (sub) {
+    case "import": {
+      await interaction.deferReply({ ephemeral: true });
+
+      try {
+        const session = await createImportSession({
+          discordId: interaction.user.id,
+          username: interaction.user.username
+        });
+
+        await interaction.editReply({
+          content:
+            `🔗 **Import Clash**\n\n` +
+            `${session.link}\n\n` +
+            `⚠️ Ce lien expire dans **15 minutes**.\n` +
+            `⚠️ Il est **utilisable une seule fois**.\n` +
+            `⚠️ Connecte-toi avec **le même compte Discord** que celui qui a lancé la commande.`
+        });
+      } catch (error) {
+        console.error("Import session error:", error);
+
+        await interaction.editReply({
+          content:
+            `❌ Impossible de créer la session d'import.\n` +
+            `Réessaie dans quelques secondes.`
+        });
+      }
+
+      break;
+    }
+
+    case "profile": {
+      return handleMyProfile(interaction);
+    }
+
+    case "setmain": {
+      const tag = interaction.options.getString("tag");
+
+      return interaction.reply({
+        content: `Commande setmain à reconnecter au service existant pour ${tag}.`,
+        ephemeral: true
+      });
+    }
+
+    default: {
+      return interaction.reply({
+        content: "Sous-commande inconnue.",
+        ephemeral: true
+      });
+    }
   }
-
-  if (subcommand === "profile") {
-    return handleMyProfile(interaction);
-  }
-
-  if (subcommand === "setmain") {
-    return handleMySetMain(interaction);
-  }
-
-  return interaction.reply({
-    content: "Sous-commande inconnue."
-  });
 }
 
 export default {

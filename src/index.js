@@ -3,6 +3,8 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { Client, Collection, GatewayIntentBits } from "discord.js";
 import env from "./config/env.js";
+import { startImportBridgeServer } from "./services/importBridgeServer.js";
+import { processWebImport } from "./services/myImportService.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -45,5 +47,10 @@ for (const file of eventFiles) {
     client.on(event.name, (...args) => event.execute(...args, client));
   }
 }
+
+startImportBridgeServer({
+  client,
+  processWebImport
+});
 
 client.login(env.DISCORD_TOKEN);

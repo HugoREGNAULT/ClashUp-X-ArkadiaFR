@@ -242,7 +242,7 @@ function buildHeroesSection(parsed, progress, townHall) {
     `<:1_:1481026443470176409>〡Héros **${safePercent(progress.heroes)}%**`,
     homeLines.length ? homeLines.join("\n") : "     ➥ Aucune donnée",
     builderLines.length ? "" : null,
-    builderLines.length ? "⚙️ **Base des ouvriers**" : null,
+    builderLines.length ? "<:1_:1481026443470176409> __Base des ouvriers__ :" : null,
     ...builderLines
   ]
     .filter(Boolean)

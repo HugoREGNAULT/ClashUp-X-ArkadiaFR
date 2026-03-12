@@ -52,18 +52,18 @@ const SPELL_ID_MAP = {
   26000002: "rage",
   26000003: "jump",
   26000005: "freeze",
-  26000009: "clone",
-  26000010: "poison",
-  26000011: "earthquake",
-  26000016: "haste",
+  26000010: "clone",
+  26000009: "poison",
+  26000016: "earthquake",
+  26000011: "haste",
   26000017: "skeleton",
   26000028: "bat",
   26000035: "invisibility",
   26000053: "recallspell",
   26000070: "overgrowth",
   26000098: "revive",
-  26000109: "totem",
-  26000120: "iceblock"
+  26000120: "totem",
+  26000109: "iceblock"
 };
 
 const PET_ID_MAP = {
@@ -77,7 +77,8 @@ const PET_ID_MAP = {
   73000009: "phoenix",
   73000010: "spiritfox",
   73000011: "angryjelly",
-  73000016: "sneezy"
+  73000016: "sneezy",
+  73000017: "corbutin"
 };
 
 const SIEGE_MACHINE_ID_MAP = {

@@ -27,17 +27,17 @@ export const MY_EMOJIS = {
 
 export const MY_PROFILE_EMOJIS = {
   heroes: {
-    barbarianking: "<:barbarianking:1138953623884267520>",
-    archerqueen: "<:Queen:700065300137246790>",
-    grandwarden: "<:warden_v2:1437860354603614268>",
-    royalchampion: "<:Championne:930155420998307880>",
+    barbarianking: "<:5_:1481435862804856963>",
+    archerqueen: "<:6_:1481436742635753472>",
+    grandwarden: "<:7_:1481436811287990333>",
+    royalchampion: "<:8_:1481436868527525991>",
     minionprince: "<:HERO_PrinceMinion:1443691863193161788>",
     dragonduke: "<:HERO_DragonDuke:1480981007749480459>"
   },
 
   builderHeroes: {
-    battlemachine: "⚙️",
-    battlecopter: "🚁"
+    battlemachine: "<:b_:1481437849575231539>",
+    battlecopter: "<:a_:1481437793581269122>"
   },
 
   troops: {
@@ -95,17 +95,17 @@ export const MY_PROFILE_EMOJIS = {
   },
 
   pets: {
-    lassi: "<:Lassi:930153412434231306>",
-    electroowl: "<:Electro_chouette:1437884331300360343>",
-    mightyyak: "<:Yak_roubuste:1437884781634523166>",
-    unicorn: "<:Licorne:1437884516520824924>",
-    frosty: "<:frostyhuh:1133418322675900456>",
-    diggy: "<:Pablo:1437884579582050344>",
-    poisonlizard: "<:Lezard_letal:1437884481158779010>",
-    phoenix: "<:Phenix:1437884627237998622>",
-    spiritfox: "<:Renard_spirituel:1437884688453734542>",
-    angryjelly: "<:Meduse_colerique:1437884552923189309>",
-    sneezy: "<:Atchoum:1437884231513538572>",
+    lassi: "<:e_:1481442257872617603>",
+    electroowl: "<:f_:1481442392702849227>",
+    mightyyak: "<:g_:1481442585544232973>",
+    unicorn: "<:h_:1481442652707754127>",
+    frosty: "<:i_:1481442823285903412>",
+    diggy: "<:j_:1481442870094200852>",
+    poisonlizard: "<:k_:1481443101510991972>",
+    phoenix: "<:m_:1481443482932609075>",
+    spiritfox: "<:l_:1481443160470065314>",
+    angryjelly: "<:n_:1481443621025747087>",
+    sneezy: "<:o_:1481443776034767119>",
     unknownpet_73000017: "<:9_:1481036628754567290>"
   },
 
@@ -121,8 +121,8 @@ export const MY_PROFILE_EMOJIS = {
   },
 
   guards: {
-    longshot: "<:Artilleuse:1472710443083632701>",
-    smasher: "<:Destructeur:1472710395327418631>"
+    longshot: "<:d_:1481439158391148695>",
+    smasher: "<:c_:1481439077910843504>"
   },
 
   equipment: {

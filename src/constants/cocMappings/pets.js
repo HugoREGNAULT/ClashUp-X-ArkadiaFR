@@ -11,5 +11,6 @@ export const PET_NAME_ALIASES = {
   spiritfox: "spiritFox",
   angryjelly: "angryJelly",
   jelly: "angryJelly",
-  sneezy: "sneezy"
+  sneezy: "sneezy",
+  corbutin: "corbutin"
 };

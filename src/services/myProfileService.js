@@ -1,4 +1,3 @@
-// /src/services/myProfileService.js
 import fs from "fs";
 import path from "path";
 import { MessageFlags } from "discord.js";
@@ -13,18 +12,35 @@ import {
 import {
   buildMyNoProfileV2,
   buildMyPlayerNotFoundV2,
-  buildMyProfileViewV2,
   buildMySetMainSuccessV2
 } from "../builders/myMessageBuilder.js";
+import {
+  buildProfileOverview,
+  buildProfileCategory
+} from "../builders/myProfileInteractiveBuilder.js";
 import { logCommandError, logInfo } from "./logger.js";
 import { computeVillageProgress } from "./myProgressService.js";
 import { normalizeParsedVillage } from "./myIdResolverService.js";
-import { getProfileEmoji, getTownHallEmoji } from "../constants/myEmojis.js";
+import {
+  getProfileEmoji,
+  getTownHallEmoji
+} from "../constants/myEmojis.js";
 
 const LEVELS_PATH = path.join(process.cwd(), "data", "coc_levels.json");
 
 let LEVELS_CACHE = null;
 let DISPLAY_CACHE = null;
+
+const VIEW_META = {
+  heroes: { title: "Héros", icon: "🗡" },
+  troops: { title: "Troupes", icon: "⚔️" },
+  spells: { title: "Sorts", icon: "🧪" },
+  sieges: { title: "Engins", icon: "🛠" },
+  pets: { title: "Familiers", icon: "🔥" },
+  guards: { title: "Gardiens", icon: "🛡" },
+  walls: { title: "Remparts", icon: "🧱" },
+  buildings: { title: "Bâtiments", icon: "🏠" }
+};
 
 export async function handleMyImport(interaction) {
   return handleImportFlow(interaction);
@@ -53,20 +69,14 @@ export async function handleMyProfile(interaction) {
       : buildApiOnlyParsed(context.apiPlayer);
 
     const progress = computeVillageProgress(parsed, parsed.townHall);
-    const sections = buildProfileSections({
-      parsed,
-      progress,
-      hasUpload: Boolean(context.parsed)
-    });
 
     return interaction.reply(
-      buildMyProfileViewV2({
+      buildProfileOverview({
         parsed,
         apiPlayer: context.apiPlayer,
-        title: "Profil joueur",
-        sections,
-        apiUpdatedAt: context.apiUpdatedAt,
-        uploadUpdatedAt: parsed.lastSyncAt || null
+        progress,
+        ownerId: interaction.user.id,
+        tag: context.tag
       })
     );
   } catch (error) {
@@ -113,8 +123,100 @@ export async function handleMySetMain(interaction) {
   }
 }
 
-export async function handleMyProfileButton() {
-  return false;
+export async function handleMyProfileButton(interaction) {
+  const parsedCustom = parseProfileCustomId(interaction.customId);
+
+  if (!parsedCustom) {
+    return false;
+  }
+
+  if (parsedCustom.userId !== interaction.user.id) {
+    if (interaction.deferred || interaction.replied) {
+      await interaction.followUp({
+        content: "❌ Ce panneau de profil ne t’appartient pas.",
+        ephemeral: true
+      });
+    } else {
+      await interaction.reply({
+        content: "❌ Ce panneau de profil ne t’appartient pas.",
+        ephemeral: true
+      });
+    }
+    return true;
+  }
+
+  try {
+    const context = await resolveProfileContext(
+      interaction.user.id,
+      `#${parsedCustom.tag}`,
+      interaction.client.env.COC_API_TOKEN
+    );
+
+    if (!context || !context.apiPlayer) {
+      await interaction.reply({
+        content: "❌ Impossible de recharger ce profil.",
+        ephemeral: true
+      });
+      return true;
+    }
+
+    const parsed = context.parsed
+      ? normalizeParsedVillage(context.parsed)
+      : buildApiOnlyParsed(context.apiPlayer);
+
+    const progress = computeVillageProgress(parsed, parsed.townHall);
+
+    if (parsedCustom.view === "overview") {
+      await interaction.update(
+        buildProfileOverview({
+          parsed,
+          apiPlayer: context.apiPlayer,
+          progress,
+          ownerId: interaction.user.id,
+          tag: context.tag
+        })
+      );
+      return true;
+    }
+
+    const detail = buildDetailViewData(parsedCustom.view, parsed, progress);
+
+    if (!detail) {
+      return false;
+    }
+
+    await interaction.update(
+      buildProfileCategory({
+        parsed,
+        apiPlayer: context.apiPlayer,
+        progressPercent: detail.percent,
+        ownerId: interaction.user.id,
+        tag: context.tag,
+        title: detail.title,
+        icon: detail.icon,
+        lines: detail.lines,
+        categoryKey: parsedCustom.view
+      })
+    );
+
+    return true;
+  } catch (error) {
+    console.error("[MY PROFILE BUTTON] Erreur :", error);
+
+    if (interaction.deferred || interaction.replied) {
+      await interaction.followUp({
+        content: "❌ Impossible de mettre à jour ce profil.",
+        ephemeral: true
+      });
+    } else {
+      await interaction.reply({
+        content: "❌ Impossible de mettre à jour ce profil.",
+        ephemeral: true
+      });
+    }
+
+    return true;
+  }
 }
 
 async function resolveProfileContext(discordId, requestedTag, apiToken) {
@@ -151,120 +253,93 @@ async function resolveProfileContext(discordId, requestedTag, apiToken) {
   };
 }
 
-function buildProfileSections({ parsed, progress, hasUpload }) {
-  const sections = [];
+function buildDetailViewData(view, parsed, progress) {
   const townHall = Number(parsed?.townHall || 0);
+  const meta = VIEW_META[view];
 
-  if (!hasUpload) {
-    sections.push(
-      [
-        "📡 **Données API uniquement**",
-        "",
-        "Aucun upload JSON n’a été trouvé pour ce compte.",
-        "Utilise **/my import** pour afficher la progression détaillée du village."
-      ].join("\n")
-    );
+  if (!meta) return null;
 
-    sections.push(
-      [
-        "📊 **Aperçu**",
-        "",
-        "Aucune progression détaillée disponible sans upload."
-      ].join("\n")
-    );
-
-    return sections;
+  if (view === "heroes") {
+    return {
+      ...meta,
+      percent: safePercent(progress.heroes),
+      lines: formatDenseOverviewLines("heroes", parsed.heroes, townHall, 5)
+    };
   }
 
-  sections.push(buildHeroesSection(parsed, progress, townHall));
-  sections.push(buildCategorySection({
-    icon: "<:4_:1481034391772991559>",
-    title: "Troupes",
-    percent: progress.troops,
-    category: "troops",
-    collection: parsed.troops,
-    townHall,
-    itemsPerLine: 5
-  }));
-  sections.push(buildCategorySection({
-    icon: "<:3_:1481032721626300579>",
-    title: "Sorts",
-    percent: progress.spells,
-    category: "spells",
-    collection: parsed.spells,
-    townHall,
-    itemsPerLine: 5
-  }));
-  sections.push(buildCategorySection({
-    icon: "<:2_:1481028283427459082>",
-    title: "Engins de siège",
-    percent: progress.sieges,
-    category: "sieges",
-    collection: parsed.siegeMachines,
-    townHall,
-    itemsPerLine: 4
-  }));
-
-  if (hasUnlockedEntries("pets", townHall)) {
-    sections.push(buildCategorySection({
-      icon: "<:2_:1481028283427459082>",
-      title: "Familiers",
-      percent: progress.pets,
-      category: "pets",
-      collection: parsed.pets,
-      townHall,
-      itemsPerLine: 5
-    }));
+  if (view === "troops") {
+    return {
+      ...meta,
+      percent: safePercent(progress.troops),
+      lines: formatDenseOverviewLines("troops", parsed.troops, townHall, 5)
+    };
   }
 
-  if (hasUnlockedEntries("guards", townHall)) {
-    sections.push(buildCategorySection({
-      icon: "<:2_:1481028283427459082>",
-      title: "Gardiens",
-      percent: progress.guards,
-      category: "guards",
-      collection: parsed.guards,
-      townHall,
-      itemsPerLine: 4
-    }));
+  if (view === "spells") {
+    return {
+      ...meta,
+      percent: safePercent(progress.spells),
+      lines: formatDenseOverviewLines("spells", parsed.spells, townHall, 5)
+    };
   }
 
-  sections.push(buildWallsSection(parsed));
+  if (view === "sieges") {
+    return {
+      ...meta,
+      percent: safePercent(progress.sieges),
+      lines: formatDenseOverviewLines("sieges", parsed.siegeMachines, townHall, 5)
+    };
+  }
 
-  return sections.filter(Boolean);
+  if (view === "pets") {
+    return {
+      ...meta,
+      percent: safePercent(progress.pets),
+      lines: formatDenseOverviewLines("pets", parsed.pets, townHall, 5)
+    };
+  }
+
+  if (view === "guards") {
+    return {
+      ...meta,
+      percent: safePercent(progress.guards),
+      lines: formatDenseOverviewLines("guards", parsed.guards, townHall, 5)
+    };
+  }
+
+  if (view === "walls") {
+    return {
+      ...meta,
+      percent: safePercent(progress.walls),
+      lines: formatWallsDenseLines(parsed, progress)
+    };
+  }
+
+  if (view === "buildings") {
+    return {
+      ...meta,
+      percent: safePercent(progress.buildings),
+      lines: formatBuildingsDenseLines(parsed, townHall)
+    };
+  }
+
+  return null;
 }
 
-function buildHeroesSection(parsed, progress, townHall) {
-  const homeLines = formatDenseOverviewLines("heroes", parsed.heroes, townHall, 6);
-  const builderLines = formatBuilderHeroesDenseLines(parsed.builderHeroes);
+function parseProfileCustomId(customId) {
+  const text = String(customId || "");
+  if (!text.startsWith("profile_")) return null;
 
-  return [
-    `<:1_:1481026443470176409>〡Héros **${safePercent(progress.heroes)}%**`,
-    homeLines.length ? homeLines.join("\n") : "     ➥ Aucune donnée",
-    builderLines.length ? "" : null,
-    builderLines.length ? "<:1_:1481026443470176409> __Base des ouvriers__ :" : null,
-    ...builderLines
-  ]
-    .filter(Boolean)
-    .join("\n");
-}
+  const parts = text.split("_");
+  if (parts.length < 4) return null;
 
-function buildCategorySection({ icon, title, percent, category, collection, townHall, itemsPerLine }) {
-  const lines = formatDenseOverviewLines(category, collection, townHall, itemsPerLine);
+  const view = parts[1];
+  const userId = parts[2];
+  const tag = parts.slice(3).join("_");
 
-  return [
-    `${icon}〡${title} **${safePercent(percent)}%**`,
-    lines.length ? lines.join("\n") : "     ➥ Aucune donnée"
-  ].join("\n");
-}
+  if (!view || !userId || !tag) return null;
 
-function buildWallsSection(parsed) {
-  const total = parsed?.walls?.total ?? sumObjectValues(parsed?.walls?.byLevel);
-
-  return [
-    "🧱〡Remparts",
-    `     ➥ ${total || 0} détectés`
-  ].join("\n");
+  return { view, userId, tag };
 }
 
 function formatDenseOverviewLines(category, collection, townHall, itemsPerLine) {
@@ -279,34 +354,102 @@ function formatDenseOverviewLines(category, collection, townHall, itemsPerLine) 
     const currentLevel = Number(collection?.[key]);
     const emoji = getResolvedEmoji(category, key, entry?.emoji_markdown);
 
-    items.push(`${emoji} \`${Number.isFinite(currentLevel) ? currentLevel : "?"}/${maxLevel}\``);
+    items.push(`${emoji} \`${Number.isFinite(currentLevel) ? currentLevel : "0"}/${maxLevel}\``);
+  }
+
+  if (!items.length) {
+    return ["↳ Aucune donnée disponible"];
   }
 
   return chunk(items, itemsPerLine).map((group, lineIndex) => {
-    const prefix = lineIndex === 0 ? "     ➥ " : "           ";
-    return `${prefix}${group.join("  ")}`;
+    const prefix = lineIndex === 0 ? "↳ " : "  ";
+    return `${prefix}${group.join("   ")}`;
   });
 }
 
-function formatBuilderHeroesDenseLines(collection) {
-  if (!collection || typeof collection !== "object") return [];
+function formatWallsDenseLines(parsed, progress) {
+  const byLevel = parsed?.walls?.byLevel ?? {};
+  const maxLevel = Number(progress?.details?.walls?.maxLevel || 0);
+  const items = [];
 
-  const entries = [];
-  const machine = Number(collection.battlemachine);
-  const copter = Number(collection.battlecopter);
+  const orderedLevels = Object.keys(byLevel)
+    .map((key) => Number(key))
+    .filter((level) => Number.isFinite(level))
+    .sort((a, b) => b - a);
 
-  if (Number.isFinite(machine)) {
-    entries.push(`${getProfileEmoji("builderHeroes", "battlemachine")} \`${machine}/?\``);
+  for (const level of orderedLevels) {
+    const count = Number(byLevel[level]);
+    if (!Number.isFinite(count) || count <= 0) continue;
+
+    items.push(`🧱 \`${count}× ${level}/${maxLevel || "?"}\``);
   }
 
-  if (Number.isFinite(copter)) {
-    entries.push(`${getProfileEmoji("builderHeroes", "battlecopter")} \`${copter}/?\``);
+  if (!items.length) {
+    return ["↳ Aucune donnée disponible"];
   }
 
-  return chunk(entries, 4).map((group, index) => {
-    const prefix = index === 0 ? "     ➥ " : "           ";
-    return `${prefix}${group.join("  ")}`;
+  return chunk(items, 5).map((group, lineIndex) => {
+    const prefix = lineIndex === 0 ? "↳ " : "  ";
+    return `${prefix}${group.join("   ")}`;
   });
+}
+
+function formatBuildingsDenseLines(parsed, townHall) {
+  const index = getEntriesForCategory("buildings");
+  const buildings = flattenBuildings(parsed?.buildings);
+  const items = [];
+
+  for (const entry of index.entries) {
+    const maxLevel = getMaxFromEntry(entry, townHall);
+    if (!Number.isFinite(maxLevel) || maxLevel <= 0) continue;
+
+    const key = String(entry.api_name || "").toLowerCase();
+    const currentLevel = Number(buildings?.[key]);
+
+    items.push(`🏠 \`${Number.isFinite(currentLevel) ? currentLevel : "0"}/${maxLevel}\``);
+  }
+
+  if (!items.length) {
+    return ["↳ Aucune donnée disponible"];
+  }
+
+  return chunk(items, 5).map((group, lineIndex) => {
+    const prefix = lineIndex === 0 ? "↳ " : "  ";
+    return `${prefix}${group.join("   ")}`;
+  });
+}
+
+function flattenBuildings(buildings) {
+  if (!buildings || typeof buildings !== "object") {
+    return {};
+  }
+
+  if (Array.isArray(buildings)) {
+    const mapped = {};
+    for (const entry of buildings) {
+      const key = String(entry?.api_name ?? entry?.name ?? entry?.key ?? "").toLowerCase();
+      const level = Number(entry?.level);
+
+      if (!key || !Number.isFinite(level)) continue;
+      mapped[key] = level;
+    }
+    return mapped;
+  }
+
+  const output = {};
+
+  for (const [key, value] of Object.entries(buildings)) {
+    if (Number.isFinite(Number(value))) {
+      output[String(key).toLowerCase()] = Number(value);
+      continue;
+    }
+
+    if (value && typeof value === "object" && Number.isFinite(Number(value.level))) {
+      output[String(key).toLowerCase()] = Number(value.level);
+    }
+  }
+
+  return output;
 }
 
 function getResolvedEmoji(category, key, fallbackEmojiMarkdown) {
@@ -328,6 +471,7 @@ function getEntriesForCategory(category) {
   if (category === "pets") return display.pets;
   if (category === "guards") return display.guards;
   if (category === "sieges") return display.sieges;
+  if (category === "buildings") return display.buildings;
 
   return { entries: [], meta: new Map(), order: new Map() };
 }
@@ -342,7 +486,13 @@ function getDisplayIndexes() {
       spells: makeOrderedIndex(levels.spells),
       pets: makeOrderedIndex(levels.pets),
       guards: makeOrderedIndex(levels.guards),
-      sieges: makeOrderedIndex(levels.siege_machines)
+      sieges: makeOrderedIndex(levels.siege_machines),
+      buildings: makeOrderedIndex(
+        levels.buildings ??
+        levels.home_buildings ??
+        levels.village_buildings ??
+        []
+      )
     };
   }
 
@@ -401,25 +551,12 @@ function getMaxFromEntry(entry, townHall) {
   return best?.max ?? null;
 }
 
-function hasUnlockedEntries(category, townHall) {
-  const index = getEntriesForCategory(category);
-  return index.entries.some((entry) => {
-    const max = getMaxFromEntry(entry, townHall);
-    return Number.isFinite(max) && max > 0;
-  });
-}
-
 function chunk(array, size) {
   const output = [];
   for (let i = 0; i < array.length; i += size) {
     output.push(array.slice(i, i + size));
   }
   return output;
-}
-
-function sumObjectValues(collection) {
-  if (!collection) return 0;
-  return Object.values(collection).reduce((total, value) => total + Number(value || 0), 0);
 }
 
 function safePercent(value) {
@@ -454,6 +591,7 @@ function buildApiOnlyParsed(apiPlayer) {
     guards: {},
     equipment: {},
     siegeMachines: {},
+    buildings: {},
     walls: {
       total: 0,
       byLevel: {}

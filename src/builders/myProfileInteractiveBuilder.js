@@ -6,7 +6,8 @@ import {
     MessageFlags,
     SeparatorBuilder,
     SeparatorSpacingSize,
-    TextDisplayBuilder
+    TextDisplayBuilder,
+    ThumbnailBuilder
   } from "discord.js";
   
   import { getTownHallEmoji } from "../constants/myEmojis.js";
@@ -17,6 +18,7 @@ import {
     leader: "Chef",
     coLeader: "Chef adjoint",
     admin: "Aîné",
+    elder: "Aîné",
     member: "Membre"
   };
   
@@ -33,31 +35,34 @@ import {
   };
   
   function escapeMarkdown(text) {
-    return String(text ?? "").replace(/([\[\]()_*~`>])/g, "\\$1");
+    return String(text ?? "").replace(/([\\`*_{}[\]()#+\-.!|>])/g, "\\$1");
+  }
+  
+  function getRoleLabel(role) {
+    return ROLE_LABELS[role] ?? "Membre";
   }
   
   function buildClanLink(apiPlayer) {
     const clanName = apiPlayer?.clan?.name;
     const clanTag = apiPlayer?.clan?.tag;
-    const roleRaw = apiPlayer?.role;
-    const role = ROLE_LABELS[roleRaw] ?? "Membre";
+    const roleLabel = getRoleLabel(apiPlayer?.role);
   
     if (!clanName || !clanTag) {
       return "Sans clan";
     }
   
     const cleanTag = clanTag.replace("#", "");
-    const url = `https://link.clashofclans.com/?action=OpenClanProfile&tag=${cleanTag}`;
+    const url = `https://link.clashofclans.com/?action=OpenClanProfile&tag=%23${cleanTag}`;
   
-    return `[${escapeMarkdown(clanName)} — ${role}](${url})`;
+    return `[${escapeMarkdown(clanName)} — ${escapeMarkdown(roleLabel)}](${url})`;
   }
   
   function buildHeader(parsed, apiPlayer) {
     const playerName = apiPlayer?.name ?? parsed?.playerName ?? "Inconnu";
-    const townHall = Number(parsed?.townHall || apiPlayer?.townHallLevel || 0);
+    const townHall = Number(parsed?.townHall ?? apiPlayer?.townHallLevel ?? 0);
     const thEmoji = getTownHallEmoji(townHall);
     const clanLink = buildClanLink(apiPlayer);
-    const accountLevel = Number(apiPlayer?.expLevel || 0);
+    const accountLevel = Number(apiPlayer?.expLevel ?? 0);
   
     return [
       `## ${escapeMarkdown(playerName)} (${clanLink})`,
@@ -67,108 +72,141 @@ import {
     ].join("\n");
   }
   
-  function buildOverviewBody(progress, parsed) {
-    const lastImport =
-      parsed?.lastSyncAt && !Number.isNaN(new Date(parsed.lastSyncAt).getTime())
-        ? Math.floor(new Date(parsed.lastSyncAt).getTime() / 1000)
-        : null;
+  function getLastImportLine(parsed) {
+    const rawDate =
+      parsed?.lastSyncAt ??
+      parsed?.lastImport ??
+      parsed?.updatedAt ??
+      null;
   
-    const lines = [
-      "### 📊 Progression du village",
-      "",
-      `🗡 Héros — **${progress.heroes}%**`,
-      `⚔️ Troupes — **${progress.troops}%**`,
-      `🧪 Sorts — **${progress.spells}%**`,
-      `🛠 Engins — **${progress.sieges}%**`,
-      `🔥 Familiers — **${progress.pets}%**`,
-      `🛡 Gardiens — **${progress.guards}%**`,
-      `🧱 Remparts — **${progress.walls}%**`,
-      `🏠 Bâtiments — **${progress.buildings}%**`
-    ];
-  
-    if (lastImport) {
-      lines.push("", `-# Dernier import : <t:${lastImport}:R>`);
+    if (!rawDate) {
+      return "-# Dernier import : inconnu";
     }
   
-    return lines.join("\n");
-  }
-  
-  function buildDetailBody({ title, icon, percent, lines, parsed }) {
-    const lastImport =
-      parsed?.lastSyncAt && !Number.isNaN(new Date(parsed.lastSyncAt).getTime())
-        ? Math.floor(new Date(parsed.lastSyncAt).getTime() / 1000)
-        : null;
-  
-    const body = [
-      `### ${icon} | ${title} **${percent}%**`,
-      "",
-      ...(lines?.length ? lines : ["↳ Aucune donnée disponible"])
-    ];
-  
-    if (lastImport) {
-      body.push("", `-# Dernier import : <t:${lastImport}:R>`);
+    const date = new Date(rawDate);
+    if (Number.isNaN(date.getTime())) {
+      return "-# Dernier import : inconnu";
     }
   
-    return body.join("\n");
+    const ts = Math.floor(date.getTime() / 1000);
+    return `-# Dernier import : <t:${ts}:R>`;
   }
   
-  function makeButton(view, activeView, userId, tag) {
+  function buildOverviewBody(progress) {
+    return [
+      "## 📊 Progression du village",
+      "",
+      `🗡 Héros — **${Number(progress?.heroes ?? 0)}%**`,
+      `⚔️ Troupes — **${Number(progress?.troops ?? 0)}%**`,
+      `🧪 Sorts — **${Number(progress?.spells ?? 0)}%**`,
+      `🛠 Engins — **${Number(progress?.sieges ?? 0)}%**`,
+      `🔥 Familiers — **${Number(progress?.pets ?? 0)}%**`,
+      `🛡 Gardiens — **${Number(progress?.guards ?? 0)}%**`,
+      `🧱 Remparts — **${Number(progress?.walls ?? 0)}%**`,
+      `🏠 Bâtiments — **${Number(progress?.buildings ?? 0)}%**`
+    ].join("\n");
+  }
+  
+  function buildDetailBody({ title, icon, percent, lines }) {
+    return [
+      `## ${icon} | ${title} **${Number(percent ?? 0)}%**`,
+      "",
+      ...(Array.isArray(lines) && lines.length ? lines : ["↳ Aucune donnée disponible"])
+    ].join("\n");
+  }
+  
+  function makeButton(view, activeView, ownerId, tag) {
     const meta = CATEGORY_META[view];
-    const customId = `profile_${view}_${userId}_${String(tag || "").replace(/^#/, "")}`;
+    const cleanTag = String(tag || "").replace(/^#/, "");
   
     return new ButtonBuilder()
-      .setCustomId(customId)
+      .setCustomId(`profile_${view}_${ownerId}_${cleanTag}`)
       .setLabel(meta.label)
       .setStyle(view === activeView ? ButtonStyle.Primary : ButtonStyle.Secondary);
   }
   
-  function buildButtons(activeView, userId, tag) {
+  function buildButtons(activeView, ownerId, tag) {
     const row1 = new ActionRowBuilder().addComponents(
-      makeButton("overview", activeView, userId, tag),
-      makeButton("heroes", activeView, userId, tag),
-      makeButton("troops", activeView, userId, tag),
-      makeButton("spells", activeView, userId, tag),
-      makeButton("sieges", activeView, userId, tag)
+      makeButton("overview", activeView, ownerId, tag),
+      makeButton("heroes", activeView, ownerId, tag),
+      makeButton("troops", activeView, ownerId, tag),
+      makeButton("spells", activeView, ownerId, tag),
+      makeButton("sieges", activeView, ownerId, tag)
     );
   
     const row2 = new ActionRowBuilder().addComponents(
-      makeButton("pets", activeView, userId, tag),
-      makeButton("guards", activeView, userId, tag),
-      makeButton("walls", activeView, userId, tag),
-      makeButton("buildings", activeView, userId, tag)
+      makeButton("pets", activeView, ownerId, tag),
+      makeButton("guards", activeView, ownerId, tag),
+      makeButton("walls", activeView, ownerId, tag),
+      makeButton("buildings", activeView, ownerId, tag)
     );
   
     return [row1, row2];
   }
   
-  function buildBaseContainer(parsed, apiPlayer, body) {
+  function buildThumbnail(apiPlayer) {
+    const url =
+      apiPlayer?.league?.iconUrls?.medium ??
+      apiPlayer?.league?.iconUrls?.small ??
+      apiPlayer?.league?.iconUrls?.tiny ??
+      null;
+  
+    if (!url) return null;
+  
+    return new ThumbnailBuilder().setURL(url);
+  }
+  
+  function buildSeparator() {
+    return new SeparatorBuilder()
+      .setDivider(true)
+      .setSpacing(SeparatorSpacingSize.Small);
+  }
+  
+  function buildContainer({ parsed, apiPlayer, body, activeView, ownerId, tag }) {
     const container = new ContainerBuilder().setAccentColor(ACCENT_COLOR);
   
-    const leagueBadge = apiPlayer?.league?.iconUrls?.medium ?? null;
-    if (leagueBadge) {
-      container.setThumbnail(leagueBadge);
+    const thumbnail = buildThumbnail(apiPlayer);
+    if (thumbnail) {
+      container.addThumbnailComponents(thumbnail);
     }
   
     container.addTextDisplayComponents(
-      new TextDisplayBuilder().setContent(`${buildHeader(parsed, apiPlayer)}\n\n${body}`)
+      new TextDisplayBuilder().setContent(buildHeader(parsed, apiPlayer))
     );
   
-    container.addSeparatorComponents(
-      new SeparatorBuilder()
-        .setDivider(true)
-        .setSpacing(SeparatorSpacingSize.Small)
+    container.addSeparatorComponents(buildSeparator());
+  
+    container.addTextDisplayComponents(
+      new TextDisplayBuilder().setContent(body)
+    );
+  
+    container.addSeparatorComponents(buildSeparator());
+  
+    const rows = buildButtons(activeView, ownerId, tag);
+    container.addActionRowComponents(...rows);
+  
+    container.addSeparatorComponents(buildSeparator());
+  
+    container.addTextDisplayComponents(
+      new TextDisplayBuilder().setContent(getLastImportLine(parsed))
     );
   
     return container;
   }
   
   export function buildProfileOverview({ parsed, apiPlayer, progress, ownerId, tag }) {
-    const container = buildBaseContainer(parsed, apiPlayer, buildOverviewBody(progress, parsed));
-    const rows = buildButtons("overview", ownerId, tag);
+    const container = buildContainer({
+      parsed,
+      apiPlayer,
+      body: buildOverviewBody(progress),
+      activeView: "overview",
+      ownerId,
+      tag
+    });
   
     return {
       flags: MessageFlags.IsComponentsV2,
-      components: [container, ...rows]
+      components: [container]
     };
   }
   
@@ -183,22 +221,22 @@ import {
     lines,
     categoryKey
   }) {
-    const container = buildBaseContainer(
+    const container = buildContainer({
       parsed,
       apiPlayer,
-      buildDetailBody({
+      body: buildDetailBody({
         title,
         icon,
         percent: progressPercent,
-        lines,
-        parsed
-      })
-    );
-  
-    const rows = buildButtons(categoryKey, ownerId, tag);
+        lines
+      }),
+      activeView: categoryKey,
+      ownerId,
+      tag
+    });
   
     return {
       flags: MessageFlags.IsComponentsV2,
-      components: [container, ...rows]
+      components: [container]
     };
   }

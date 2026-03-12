@@ -84,11 +84,13 @@ import {
     }
   
     const date = new Date(rawDate);
+  
     if (Number.isNaN(date.getTime())) {
       return "-# Dernier import : inconnu";
     }
   
     const ts = Math.floor(date.getTime() / 1000);
+  
     return `-# Dernier import : <t:${ts}:R>`;
   }
   
@@ -96,20 +98,20 @@ import {
     return [
       "## 📊 Progression du village",
       "",
-      `🗡 Héros — **${Number(progress?.heroes ?? 0)}%**`,
-      `⚔️ Troupes — **${Number(progress?.troops ?? 0)}%**`,
-      `🧪 Sorts — **${Number(progress?.spells ?? 0)}%**`,
-      `🛠 Engins — **${Number(progress?.sieges ?? 0)}%**`,
-      `🔥 Familiers — **${Number(progress?.pets ?? 0)}%**`,
-      `🛡 Gardiens — **${Number(progress?.guards ?? 0)}%**`,
-      `🧱 Remparts — **${Number(progress?.walls ?? 0)}%**`,
-      `🏠 Bâtiments — **${Number(progress?.buildings ?? 0)}%**`
+      `🗡 Héros — **${progress.heroes}%**`,
+      `⚔️ Troupes — **${progress.troops}%**`,
+      `🧪 Sorts — **${progress.spells}%**`,
+      `🛠 Engins — **${progress.sieges}%**`,
+      `🔥 Familiers — **${progress.pets}%**`,
+      `🛡 Gardiens — **${progress.guards}%**`,
+      `🧱 Remparts — **${progress.walls}%**`,
+      `🏠 Bâtiments — **${progress.buildings}%**`
     ].join("\n");
   }
   
   function buildDetailBody({ title, icon, percent, lines }) {
     return [
-      `## ${icon} | ${title} **${Number(percent ?? 0)}%**`,
+      `## ${icon} | ${title} **${percent}%**`,
       "",
       ...(Array.isArray(lines) && lines.length ? lines : ["↳ Aucune donnée disponible"])
     ].join("\n");
@@ -145,33 +147,39 @@ import {
   }
   
   function buildThumbnail(apiPlayer) {
-    const url =
+  
+    const leagueIcon =
+      apiPlayer?.league?.iconUrls?.large ??
       apiPlayer?.league?.iconUrls?.medium ??
       apiPlayer?.league?.iconUrls?.small ??
-      apiPlayer?.league?.iconUrls?.tiny ??
       null;
   
-    if (!url) return null;
+    if (!leagueIcon) return null;
   
-    return new ThumbnailBuilder().setURL(url);
+    return new ThumbnailBuilder().setURL(leagueIcon);
   }
   
   function buildSeparator() {
     return new SeparatorBuilder()
       .setDivider(true)
-      .setSpacing(SeparatorSpacingSize.Small);
+      .setSpacing(SeparatorSpacingSize.Large);
   }
   
   function buildContainer({ parsed, apiPlayer, body, activeView, ownerId, tag }) {
-    const container = new ContainerBuilder().setAccentColor(ACCENT_COLOR);
+  
+    const container = new ContainerBuilder()
+      .setAccentColor(ACCENT_COLOR);
   
     const thumbnail = buildThumbnail(apiPlayer);
+  
     if (thumbnail) {
       container.addThumbnailComponents(thumbnail);
     }
   
     container.addTextDisplayComponents(
-      new TextDisplayBuilder().setContent(buildHeader(parsed, apiPlayer))
+      new TextDisplayBuilder().setContent(
+        buildHeader(parsed, apiPlayer)
+      )
     );
   
     container.addSeparatorComponents(buildSeparator());
@@ -183,18 +191,28 @@ import {
     container.addSeparatorComponents(buildSeparator());
   
     const rows = buildButtons(activeView, ownerId, tag);
+  
     container.addActionRowComponents(...rows);
   
     container.addSeparatorComponents(buildSeparator());
   
     container.addTextDisplayComponents(
-      new TextDisplayBuilder().setContent(getLastImportLine(parsed))
+      new TextDisplayBuilder().setContent(
+        getLastImportLine(parsed)
+      )
     );
   
     return container;
   }
   
-  export function buildProfileOverview({ parsed, apiPlayer, progress, ownerId, tag }) {
+  export function buildProfileOverview({
+    parsed,
+    apiPlayer,
+    progress,
+    ownerId,
+    tag
+  }) {
+  
     const container = buildContainer({
       parsed,
       apiPlayer,
@@ -221,6 +239,7 @@ import {
     lines,
     categoryKey
   }) {
+  
     const container = buildContainer({
       parsed,
       apiPlayer,

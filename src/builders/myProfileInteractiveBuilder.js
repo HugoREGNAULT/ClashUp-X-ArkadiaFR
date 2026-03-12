@@ -24,15 +24,15 @@ import {
   };
   
   const CATEGORY_META = {
-    overview: { label: "Overview" },
-    heroes: { label: "Héros" },
-    troops: { label: "Troupes" },
-    spells: { label: "Sorts" },
-    sieges: { label: "Engins" },
-    pets: { label: "Familiers" },
-    guards: { label: "Gardiens" },
-    walls: { label: "Remparts" },
-    buildings: { label: "Bâtiments" }
+    overview: { label: "Vue globale" },
+    heroes: { label: "👑" },
+    troops: { label: "🗡️" },
+    spells: { label: "🧪" },
+    sieges: { label: "🚁" },
+    pets: { label: "🐶" },
+    guards: { label: "👮" },
+    walls: { label: "🧱" },
+    buildings: { label: "🏛️" }
   };
   
   function escapeMarkdown(text) {
@@ -96,7 +96,6 @@ import {
   
   function buildOverviewBody(progress) {
     return [
-      "## 📊 Progression du village",
       "",
       `🗡 Héros — **${Number(progress?.heroes ?? 0)}%**`,
       `⚔️ Troupes — **${Number(progress?.troops ?? 0)}%**`,

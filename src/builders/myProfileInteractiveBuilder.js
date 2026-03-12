@@ -4,6 +4,7 @@ import {
     ButtonStyle,
     ContainerBuilder,
     MessageFlags,
+    SectionBuilder,
     SeparatorBuilder,
     SeparatorSpacingSize,
     TextDisplayBuilder,
@@ -90,7 +91,6 @@ import {
     }
   
     const ts = Math.floor(date.getTime() / 1000);
-  
     return `-# Dernier import : <t:${ts}:R>`;
   }
   
@@ -98,20 +98,20 @@ import {
     return [
       "## 📊 Progression du village",
       "",
-      `🗡 Héros — **${progress.heroes}%**`,
-      `⚔️ Troupes — **${progress.troops}%**`,
-      `🧪 Sorts — **${progress.spells}%**`,
-      `🛠 Engins — **${progress.sieges}%**`,
-      `🔥 Familiers — **${progress.pets}%**`,
-      `🛡 Gardiens — **${progress.guards}%**`,
-      `🧱 Remparts — **${progress.walls}%**`,
-      `🏠 Bâtiments — **${progress.buildings}%**`
+      `🗡 Héros — **${Number(progress?.heroes ?? 0)}%**`,
+      `⚔️ Troupes — **${Number(progress?.troops ?? 0)}%**`,
+      `🧪 Sorts — **${Number(progress?.spells ?? 0)}%**`,
+      `🛠 Engins — **${Number(progress?.sieges ?? 0)}%**`,
+      `🔥 Familiers — **${Number(progress?.pets ?? 0)}%**`,
+      `🛡 Gardiens — **${Number(progress?.guards ?? 0)}%**`,
+      `🧱 Remparts — **${Number(progress?.walls ?? 0)}%**`,
+      `🏠 Bâtiments — **${Number(progress?.buildings ?? 0)}%**`
     ].join("\n");
   }
   
   function buildDetailBody({ title, icon, percent, lines }) {
     return [
-      `## ${icon} | ${title} **${percent}%**`,
+      `## ${icon} | ${title} **${Number(percent ?? 0)}%**`,
       "",
       ...(Array.isArray(lines) && lines.length ? lines : ["↳ Aucune donnée disponible"])
     ].join("\n");
@@ -146,17 +146,15 @@ import {
     return [row1, row2];
   }
   
-  function buildThumbnail(apiPlayer) {
-  
-    const leagueIcon =
+  function getLeagueThumbnailUrl(apiPlayer) {
+    return (
+      apiPlayer?.leagueTier?.iconUrls?.large ??
+      apiPlayer?.leagueTier?.iconUrls?.small ??
       apiPlayer?.league?.iconUrls?.large ??
       apiPlayer?.league?.iconUrls?.medium ??
       apiPlayer?.league?.iconUrls?.small ??
-      null;
-  
-    if (!leagueIcon) return null;
-  
-    return new ThumbnailBuilder().setURL(leagueIcon);
+      null
+    );
   }
   
   function buildSeparator() {
@@ -165,21 +163,27 @@ import {
       .setSpacing(SeparatorSpacingSize.Large);
   }
   
-  function buildContainer({ parsed, apiPlayer, body, activeView, ownerId, tag }) {
+  function buildHeaderSection(parsed, apiPlayer) {
+    const section = new SectionBuilder().addTextDisplayComponents(
+      new TextDisplayBuilder().setContent(buildHeader(parsed, apiPlayer))
+    );
   
-    const container = new ContainerBuilder()
-      .setAccentColor(ACCENT_COLOR);
+    const thumbnailUrl = getLeagueThumbnailUrl(apiPlayer);
   
-    const thumbnail = buildThumbnail(apiPlayer);
-  
-    if (thumbnail) {
-      container.addThumbnailComponents(thumbnail);
+    if (thumbnailUrl) {
+      section.setThumbnailAccessory(
+        new ThumbnailBuilder().setURL(thumbnailUrl)
+      );
     }
   
-    container.addTextDisplayComponents(
-      new TextDisplayBuilder().setContent(
-        buildHeader(parsed, apiPlayer)
-      )
+    return section;
+  }
+  
+  function buildContainer({ parsed, apiPlayer, body, activeView, ownerId, tag }) {
+    const container = new ContainerBuilder().setAccentColor(ACCENT_COLOR);
+  
+    container.addSectionComponents(
+      buildHeaderSection(parsed, apiPlayer)
     );
   
     container.addSeparatorComponents(buildSeparator());
@@ -191,15 +195,12 @@ import {
     container.addSeparatorComponents(buildSeparator());
   
     const rows = buildButtons(activeView, ownerId, tag);
-  
     container.addActionRowComponents(...rows);
   
     container.addSeparatorComponents(buildSeparator());
   
     container.addTextDisplayComponents(
-      new TextDisplayBuilder().setContent(
-        getLastImportLine(parsed)
-      )
+      new TextDisplayBuilder().setContent(getLastImportLine(parsed))
     );
   
     return container;
@@ -212,7 +213,6 @@ import {
     ownerId,
     tag
   }) {
-  
     const container = buildContainer({
       parsed,
       apiPlayer,
@@ -239,7 +239,6 @@ import {
     lines,
     categoryKey
   }) {
-  
     const container = buildContainer({
       parsed,
       apiPlayer,

@@ -8,6 +8,8 @@ node_modules/
 .env
 .env.*
 !.env.example
+.gitignore
+archive/
 
 # logs
 *.log

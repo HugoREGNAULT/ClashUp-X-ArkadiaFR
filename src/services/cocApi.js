@@ -1,7 +1,11 @@
 import axios from "axios";
 
 function normalizeTag(tag) {
-  const clean = tag.trim().toUpperCase().replace(/\s+/g, "");
+  const clean = String(tag ?? "")
+    .trim()
+    .toUpperCase()
+    .replace(/\s+/g, "");
+
   const withHash = clean.startsWith("#") ? clean : `#${clean}`;
   return encodeURIComponent(withHash);
 }
@@ -47,6 +51,10 @@ export async function getWarLog(tag, token, limit = 10) {
   return data?.items ?? [];
 }
 
+export async function getClanWarLog(tag, token, limit = 10) {
+  return getWarLog(tag, token, limit);
+}
+
 export async function getCurrentWar(tag, token) {
   const api = createApi(token);
   return safeGet(api, `/clans/${normalizeTag(tag)}/currentwar`);
@@ -55,4 +63,15 @@ export async function getCurrentWar(tag, token) {
 export async function getLeagueGroup(tag, token) {
   const api = createApi(token);
   return safeGet(api, `/clans/${normalizeTag(tag)}/currentwar/leaguegroup`);
+}
+
+export async function getCapitalRaidSeasons(tag, token, limit = 10) {
+  const api = createApi(token);
+  const data = await safeGet(
+    api,
+    `/clans/${normalizeTag(tag)}/capitalraidseasons`,
+    { params: { limit } }
+  );
+
+  return data?.items ?? [];
 }

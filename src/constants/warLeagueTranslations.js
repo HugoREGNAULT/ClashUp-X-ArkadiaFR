@@ -1,3 +1,4 @@
+// src/constants/warLeagueTranslations.js
 const WAR_LEAGUE_TRANSLATIONS = {
     Unranked: "Non classé",
   

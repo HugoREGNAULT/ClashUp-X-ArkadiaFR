@@ -107,18 +107,18 @@ export async function buildClanV2Message({ clanTag, clanLink, token }) {
 
   const headerBlock = [
     `## ${clan.name}`,
-    `⎬**Identifiant** : \`${tag}\``,
-    `⎬**Niveau du clan** : **${clan.clanLevel ?? "?"}**`,
+    `⎬ **Identifiant** : \`${tag}\``,
+    `⎬ **Niveau du clan** : **${clan.clanLevel ?? "?"}**`,
     ``,
     `👥〡**Membres** : **${clan.members ?? members.length ?? "?"}/50**`,
     ` ➥ ${formatTHLine(thCounts)}`
   ].join("\n");
 
   const middleBlock = [
-    `${EMOJI_CLANWAR} ⎬**Ligue de clan** : **${translateWarLeagueName(clan.warLeague?.name)}**`,
-    `${EMOJI_CAPITAL} ⎬**Niveau Capitale** : **${capitalHall ?? "N/A"}**`,
+    `${EMOJI_CLANWAR} ⎬ **Ligue de clan** : **${translateWarLeagueName(clan.warLeague?.name)}**`,
+    `${EMOJI_CAPITAL} ⎬ **Niveau Capitale** : **${capitalHall ?? "N/A"}**`,
     ``,
-    `⎬**Stats Guerre** : **${wins}V / ${losses}D / ${ties}E**`
+    `<a:WarAttack:1443704676427108422> ⎬ **Stats Guerre** : **${wins}V / ${losses}D / ${ties}E**`
   ].join("\n");
 
   const footer = `*Dernière mise à jour : ${formatParisNow()}*`;
